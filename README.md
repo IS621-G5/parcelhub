@@ -110,7 +110,6 @@ The backend already allows `http://localhost:5173`. If you changed the frontend 
 **Session not persisting after refresh**
 The browser is blocking third-party cookies. Make sure both servers are on `localhost` (not `127.0.0.1` for one and `localhost` for the other — those count as different origins).
 
-## When Burr (Backend Lead) sees this
 
 This is a Sprint 1 starting point — refactor or rewrite as needed. Suggestions:
 - Move to TypeScript for compile-time error catching
