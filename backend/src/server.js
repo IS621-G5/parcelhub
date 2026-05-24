@@ -1,56 +1,55 @@
-// Express server entry point.
-// Run with:  npm run dev
-// Listens on http://localhost:3000
-
 import express from 'express'
-import cors from 'cors'
 import session from 'express-session'
-import authRoutes from './auth.js'
+import cors from 'cors'
+import { config } from './config/index.js'
+import { getDb } from './db/index.js'
+import userRoutes from './modules/users/routes.js'
+import parcelRoutes from './modules/parcels/routes.js'
 
-const app = express()
+export function buildApp() {
+  const app = express()
 
-// CORS: allow the frontend (running on :5173) to send cookies cross-origin
-app.use(
-  cors({
-    origin: 'http://localhost:5173',
+  app.use(cors({
+    origin: config.frontendOrigin,
     credentials: true,
-  })
-)
+  }))
+  app.use(express.json({ limit: '100kb' }))
 
-app.use(express.json({ limit: '50kb' }))
-
-// Session middleware — uses default in-memory store.
-// In production: swap to Redis or a DB-backed store.
-app.use(
-  session({
-    secret: process.env.SESSION_SECRET || 'dev-only-change-me-in-production',
+  app.use(session({
+    secret: config.sessionSecret,
     resave: false,
     saveUninitialized: false,
     cookie: {
-      httpOnly: true,                                    // JS cannot read cookie
-      secure: process.env.NODE_ENV === 'production',     // HTTPS only in prod
-      sameSite: 'lax',                                   // CSRF protection
-      maxAge: 24 * 60 * 60 * 1000,                       // 1 day
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: config.isProduction,
+      maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
     },
+  }))
+
+  app.get('/health', (req, res) => res.json({ ok: true }))
+
+  app.use('/auth', userRoutes)
+  app.use('/parcels', parcelRoutes)
+
+  // Central error handler — never expose stack traces in JSON
+  app.use((err, req, res, next) => {
+    console.error('[error]', err)
+    res.status(500).json({ error: 'internal_error' })
   })
-)
 
-// Healthcheck — useful when checking the server is up
-app.get('/health', (req, res) => res.json({ ok: true }))
+  return app
+}
 
-// All auth endpoints under /auth
-app.use('/auth', authRoutes)
-
-// Catch-all 404
-app.use((req, res) => res.status(404).json({ error: 'not_found' }))
-
-// Error handler — never leak stack traces to clients
-app.use((err, req, res, next) => {
-  console.error(err)
-  res.status(500).json({ error: 'internal_error' })
-})
-
-const PORT = process.env.PORT || 3000
-app.listen(PORT, () => {
-  console.log(`ParcelHub backend running on http://localhost:${PORT}`)
-})
+// Only start the HTTP listener when this file is run directly, not when
+// imported by the test suite.
+const isMain = import.meta.url === `file://${process.argv[1]}`
+if (isMain) {
+  // Initialize DB up front so the first request isn't slowed
+  getDb()
+  const app = buildApp()
+  app.listen(config.port, () => {
+    console.log(`[server] listening on http://localhost:${config.port}`)
+    console.log(`[server] frontend allowed: ${config.frontendOrigin}`)
+  })
+}

@@ -1,118 +1,121 @@
-# ParcelHub — Sprint 1 Auth
+# ParcelHub — Sprint 1
 
-Sign up + sign in for ParcelHub. Backend is Node + Express + SQLite. Frontend is React + Vite. They talk via HTTP + cookies.
+Anomaly-first unified parcel tracking aggregator.
+Sprint 1 scope: authentication (sign up + log in + log out) and dashboard.
 
-## Requirements
+## Stack
 
-- **Node.js v22 or later** (the backend uses `node:sqlite` which is built into Node 22)
-  - Check: `node -v`
-  - Install: https://nodejs.org/ (download the LTS version)
+- **Backend**: Node.js 22 + Express + SQLite (via `node:sqlite`) + bcryptjs + zod + express-session
+- **Frontend**: React + Vite + plain CSS
+- **Tests**: Jest + Supertest (in-memory SQLite)
 
-## Project layout
+## Quick Start
 
-```
-parcelhub/
-├── backend/          ← Node + Express server
-│   ├── src/
-│   │   ├── server.js     ← Express app entry
-│   │   ├── auth.js       ← /auth endpoints
-│   │   └── db.js         ← SQLite setup
-│   └── package.json
-└── frontend/         ← React + Vite app
-    ├── src/
-    │   ├── main.jsx      ← entry
-    │   ├── App.jsx       ← all UI in one file
-    │   ├── api.js        ← fetch wrapper
-    │   └── styles.css
-    └── package.json
-```
-
-## Running it
-
-You need **two terminal windows** open at the same time.
-
-### Terminal 1 — backend
+### 1. Backend
 
 ```bash
 cd backend
-npm install        # first time only
+npm install
+cp .env.example .env
 npm run dev
 ```
 
-You should see:
-```
-ParcelHub backend running on http://localhost:3000
-```
+Backend runs on `http://localhost:3001`.
 
-### Terminal 2 — frontend
+### 2. Frontend (in a new terminal)
 
 ```bash
 cd frontend
-npm install        # first time only
+npm install
 npm run dev
 ```
 
-You should see:
+Frontend runs on `http://localhost:5173`.
+
+### 3. Run tests (in a new terminal)
+
+```bash
+cd backend
+npm test
 ```
-  VITE v5.4.21  ready in 572 ms
-  ➜  Local:   http://localhost:5173/
+
+Expected output:
+
+```
+PASS  tests/auth.register.test.js
+PASS  tests/auth.login.test.js
+
+Tests:       8 passed, 8 total
 ```
 
-### Open the app
+## Sprint 1 Negative-Path Test Coverage
 
-Open your browser at **http://localhost:5173**.
+### Sign Up — `POST /auth/register`
 
-You'll see the sign-in screen. Click "Create an account" and register with any email + a password (8+ chars, with at least one letter and one digit). You'll land on the post-login screen.
+| Case               | Expected status |
+| ------------------ | --------------- |
+| Invalid email      | 400             |
+| Weak password      | 400             |
+| Duplicate email    | 409             |
+| Missing fields     | 400             |
 
-The user is saved in a SQLite file at `backend/data.db`. To start over, stop the backend, delete that file, restart.
+### Log In — `POST /auth/login`
 
-## What works
+| Case               | Expected status |
+| ------------------ | --------------- |
+| Wrong password     | 401             |
+| Non-existent user  | 401             |
+| Malformed body     | 400             |
+| Session after logout cleared | 401  |
 
-- ✅ Register a new account (`POST /auth/register`)
-- ✅ Sign in with email + password (`POST /auth/login`)
-- ✅ Stay signed in across page refresh (session cookie)
-- ✅ Sign out (`POST /auth/logout`)
-- ✅ "Who am I" check (`GET /auth/me`)
-- ✅ Friendly error messages for: wrong password, duplicate email, weak password, bad email format
+## Manual curl verification
 
-## Security choices
+```bash
+# Invalid email
+curl -i -X POST http://localhost:3001/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"email":"not-an-email","password":"ValidPass1"}'
 
-| Choice | Why |
-|---|---|
-| **bcryptjs cost 10** | OWASP minimum for 2024 — passwords are slow to brute-force |
-| **HttpOnly cookie** | JavaScript on the page cannot read the session cookie (XSS protection) |
-| **SameSite=Lax cookie** | The cookie isn't sent on cross-site POSTs (CSRF protection) |
-| **Constant-time login** | Login response time is the same whether the email exists or not — prevents user enumeration via timing |
-| **zod input validation** | Inputs are validated at the boundary; invalid input is rejected before touching the DB |
-| **Parameterised SQL** | We use `?` placeholders, never string interpolation. SQL injection is structurally impossible. |
-| **No plain-text passwords anywhere** | Cleartext is never stored, never logged, never returned in responses |
+# Weak password
+curl -i -X POST http://localhost:3001/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"email":"alice@test.com","password":"abc"}'
 
-## What's NOT here yet (Sprint 1+ work)
+# Duplicate (after first succeeds)
+curl -i -X POST http://localhost:3001/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"email":"alice@test.com","password":"ValidPass1"}'
+```
 
-- Add / list / delete parcels (next stories: US02, US03, US11)
-- Tracking timeline (Sprint 2)
-- IDOR test for parcels (US06 — Sprint 1)
-- Mock provider APIs (Sprint 2)
-- Anomaly detection (Sprint 3)
-- DevSecOps pipeline integration (Sprint 4)
+## Repository structure
 
-## Common errors & fixes
+```
+backend/
+  src/
+    server.js              entry point
+    config/index.js        reads .env
+    db/index.js            SQLite lazy singleton + schema
+    middleware/auth.js     requireAuth
+    modules/users/         routes + service (signup, login, logout, /me)
+    modules/parcels/       routes + service (CRUD, IDOR-safe)
+  tests/
+    helpers/setupDb.js     :memory: SQLite for tests
+    auth.register.test.js
+    auth.login.test.js
+frontend/
+  src/
+    App.jsx                routing + auth state
+    pages/Login.jsx
+    pages/Signup.jsx
+    pages/Dashboard.jsx
+    styles.css
+```
 
-**"Module not found: node:sqlite"**
-You're on Node < 22. Run `node -v` to check. Upgrade Node.
+## Security baseline (T-SEC-01)
 
-**Frontend says "Failed to fetch"**
-Backend isn't running, or it's running on a different port. Check Terminal 1.
-
-**"CORS error" in browser console**
-The backend already allows `http://localhost:5173`. If you changed the frontend port in `vite.config.js`, also update `origin` in `backend/src/server.js`.
-
-**Session not persisting after refresh**
-The browser is blocking third-party cookies. Make sure both servers are on `localhost` (not `127.0.0.1` for one and `localhost` for the other — those count as different origins).
-
-
-This is a Sprint 1 starting point — refactor or rewrite as needed. Suggestions:
-- Move to TypeScript for compile-time error catching
-- Add a proper error middleware that logs to a file in production
-- Switch the in-memory session store to Redis or a DB-backed store before Sprint 4 demo
-- Add `tests/` directory with Jest — the structure is here, just no tests yet for this stripped version
+- bcrypt cost 10 for password hashing
+- Constant-time compare on login (even when user not found)
+- HttpOnly + SameSite=Lax session cookies
+- zod input validation at every endpoint
+- IDOR mitigation: cross-user parcel access returns 404, not 403
+- `.env` gitignored; `.env.example` committed
