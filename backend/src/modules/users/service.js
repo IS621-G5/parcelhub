@@ -36,3 +36,10 @@ export async function verifyCredentials(email, password) {
   const ok = await bcrypt.compare(password, user.password_hash)
   return ok ? { id: user.id, email: user.email } : null
 }
+
+// Sprint 1 US1.3 — used by /auth/reset-password after consumeResetToken
+// has validated the reset token.
+export function updatePassword(userId, passwordHash) {
+  getDb().prepare(`UPDATE users SET password_hash = ? WHERE id = ?`)
+    .run(passwordHash, userId)
+}
