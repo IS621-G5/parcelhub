@@ -1,6 +1,10 @@
 import { Router } from 'express'
+import bcrypt from 'bcryptjs'
 import { z } from 'zod'
-import { createUser, verifyCredentials, findByEmail, findById } from './service.js'
+import rateLimit from 'express-rate-limit'
+import { createUser, verifyCredentials, findByEmail, findById, updatePassword } from './service.js'
+import { createResetTokenForUser, consumeResetToken } from './passwordReset.js'
+import { config } from '../../config/index.js'
 import { requireAuth } from '../../middleware/auth.js'
 
 const router = Router()
@@ -18,7 +22,38 @@ const loginSchema = z.object({
   password: z.string().min(1).max(128),
 })
 
-router.post('/register', async (req, res, next) => {
+// Sprint 1, US1.3 — same password rules as register so a successful reset
+// always yields a password that meets the login policy.
+const forgotSchema = z.object({
+  email: z.string().email().max(254),
+})
+
+const resetSchema = z.object({
+  token: z.string().regex(/^[0-9a-f]{64}$/),
+  password: z.string()
+    .min(8, 'password must be at least 8 characters')
+    .max(128)
+    .regex(/(?=.*[A-Za-z])(?=.*\d)/, 'password must contain a letter and a digit'),
+})
+
+// ─── T-SEC-04: Rate-limit auth endpoints by client IP ────────────────
+// Per-IP limits prevent credential stuffing, registration spam, and
+// account-enumeration probes against forgot-password. Bypassed in tests
+// to avoid cross-test contamination (the in-process memory store is shared).
+const authLimiter = (max) => rateLimit({
+  windowMs: 15 * 60_000,
+  max,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'rate_limited', retry_after_seconds: 15 * 60 },
+  skip: () => process.env.NODE_ENV === 'test',
+})
+
+const loginLimit  = authLimiter(20)   // 20 attempts / 15 min / IP
+const registerLimit = authLimiter(10) // 10 sign-ups / 15 min / IP
+const forgotLimit = authLimiter(5)    // 5 reset requests / 15 min / IP — tightest, enumeration target
+
+router.post('/register', registerLimit, async (req, res, next) => {
   try {
     const parsed = registerSchema.safeParse(req.body)
     if (!parsed.success) {
@@ -39,7 +74,7 @@ router.post('/register', async (req, res, next) => {
   } catch (err) { next(err) }
 })
 
-router.post('/login', async (req, res, next) => {
+router.post('/login', loginLimit, async (req, res, next) => {
   try {
     const parsed = loginSchema.safeParse(req.body)
     if (!parsed.success) {
@@ -58,6 +93,55 @@ router.post('/logout', (req, res) => {
     res.clearCookie('connect.sid')
     res.status(204).end()
   })
+})
+
+// Sprint 1, US1.3 Forget Password.
+// Always returns 200 OK regardless of whether the email exists, to prevent
+// account enumeration via this endpoint (matches the anti-enumeration story
+// in login). If the email maps to a real user, a one-time reset link is
+// logged to the server console (MVP — swap for real email send before prod).
+router.post('/forgot-password', forgotLimit, (req, res, next) => {
+  try {
+    const parsed = forgotSchema.safeParse(req.body)
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'invalid_input' })
+    }
+    const { email } = parsed.data
+    const user = findByEmail(email)
+    if (user && user.is_active) {
+      const token = createResetTokenForUser(user.id)
+      const link = `${config.frontendOrigin}/?reset=${token}`
+      console.log('\n═══ PASSWORD RESET LINK ═══')
+      console.log(`To:      ${email}`)
+      console.log(`Link:    ${link}`)
+      console.log(`Token:   ${token}`)
+      console.log(`Expires: in 1 hour`)
+      console.log('═══════════════════════════\n')
+    }
+    res.json({ ok: true })
+  } catch (err) { next(err) }
+})
+
+// Sprint 1, US1.3 — consume a one-time token, set new password.
+// Generic 'invalid_token' on any failure so an attacker cannot distinguish
+// "no such token" / "expired" / "already used".
+router.post('/reset-password', async (req, res, next) => {
+  try {
+    const parsed = resetSchema.safeParse(req.body)
+    if (!parsed.success) {
+      return res.status(400).json({
+        error: 'invalid_input',
+        issues: parsed.error.issues.map(i => ({ path: i.path, message: i.message })),
+      })
+    }
+    const userId = consumeResetToken(parsed.data.token)
+    if (!userId) {
+      return res.status(400).json({ error: 'invalid_token' })
+    }
+    const passwordHash = await bcrypt.hash(parsed.data.password, config.bcryptCost)
+    updatePassword(userId, passwordHash)
+    res.json({ ok: true })
+  } catch (err) { next(err) }
 })
 
 router.get('/me', requireAuth, (req, res) => {

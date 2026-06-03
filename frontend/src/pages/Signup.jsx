@@ -13,8 +13,10 @@ export default function Signup({ onAuth, switchToLogin }) {
     setBusy(true)
     try {
       const user = await api.signup(email, password)
+      console.log('[Signup] success — got user:', user)
       onAuth(user)
     } catch (err) {
+      console.log('[Signup] caught error — status:', err.status, 'data:', err.data, 'message:', err.message)
       if (err.status === 400) {
         const issue = err.data?.issues?.[0]?.message
         setError(issue ? `Invalid input — ${issue}.` : 'Please check your email and password.')
@@ -35,7 +37,7 @@ export default function Signup({ onAuth, switchToLogin }) {
           <div className="brand-mark">P</div>
           ParcelHub
         </div>
-        <div className="aside-hero">
+        <div className="aside-hero"><div className="eyebrow">Get started</div>
           <h1>Stop chasing tracking numbers.</h1>
           <p>
             Sign up to bring every parcel into one anomaly-first inbox —

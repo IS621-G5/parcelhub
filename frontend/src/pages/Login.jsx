@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { api } from '../api.js'
 
-export default function Login({ onAuth, switchToSignup }) {
+export default function Login({ onAuth, switchToSignup, switchToForgot }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -30,7 +30,7 @@ export default function Login({ onAuth, switchToSignup }) {
           <div className="brand-mark">P</div>
           ParcelHub
         </div>
-        <div className="aside-hero">
+        <div className="aside-hero"><div className="eyebrow">Anomaly-first parcel tracking</div>
           <h1>One inbox for every parcel.</h1>
           <p>
             Track Shopee, Lazada, DHL, Ninja Van, and SingPost shipments in one place —
@@ -69,6 +69,9 @@ export default function Login({ onAuth, switchToSignup }) {
               required
               disabled={busy}
             />
+            <div style={{ marginTop: 6, textAlign: 'right' }}>
+              <span className="link-btn" onClick={switchToForgot}>Forgot password?</span>
+            </div>
           </div>
 
           {error && <div className="error">{error}</div>}

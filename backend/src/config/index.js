@@ -28,8 +28,16 @@ export const config = {
   frontendOrigin: process.env.FRONTEND_ORIGIN || 'http://localhost:5173',
   dbPath: process.env.DB_PATH || './parcelhub.db',
   isProduction: process.env.NODE_ENV === 'production',
+  // Sprint 3: 32-byte hex string for AES-256-GCM token encryption.
+  // Run `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
+  // to generate, store in .env (never commit), rotate annually.
+  tokenEncryptionKey: process.env.TOKEN_ENCRYPTION_KEY,
 }
 
 if (!process.env.SESSION_SECRET && config.isProduction) {
   throw new Error('SESSION_SECRET is required in production')
+}
+
+if (!process.env.TOKEN_ENCRYPTION_KEY && config.isProduction) {
+  throw new Error('TOKEN_ENCRYPTION_KEY is required in production')
 }

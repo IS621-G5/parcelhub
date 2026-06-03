@@ -1,0 +1,105 @@
+import { getDb } from '../../db/index.js'
+
+const DEFAULTS = {
+  email_on_exception: 1, email_on_delivered: 0, email_on_returned: 1,
+  inapp_on_exception: 1, inapp_on_delivered: 1, inapp_on_returned: 1,
+}
+
+export function getPrefs(userId) {
+  const row = getDb().prepare(`
+    SELECT * FROM notification_prefs WHERE user_id = ?
+  `).get(userId)
+  if (row) return row
+  // First access — initialise with defaults
+  getDb().prepare(`
+    INSERT INTO notification_prefs (user_id) VALUES (?)
+  `).run(userId)
+  return { user_id: userId, ...DEFAULTS, updated_at: new Date().toISOString() }
+}
+
+export function updatePrefs(userId, updates) {
+  // Ensure row exists
+  getPrefs(userId)
+
+  const allowed = Object.keys(DEFAULTS)
+  const setParts = []
+  const values = []
+  for (const key of allowed) {
+    if (updates[key] !== undefined) {
+      setParts.push(`${key} = ?`)
+      values.push(updates[key] ? 1 : 0)
+    }
+  }
+  if (setParts.length === 0) return getPrefs(userId)
+  setParts.push("updated_at = datetime('now')")
+  values.push(userId)
+
+  getDb().prepare(`
+    UPDATE notification_prefs SET ${setParts.join(', ')} WHERE user_id = ?
+  `).run(...values)
+  return getPrefs(userId)
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Sprint 2 — In-app notification events.
+// Separate from notification_prefs (which is just toggles).
+// ──────────────────────────────────────────────────────────────────────
+
+// Idempotent — the unique index on (user_id, parcel_id, type) prevents dupes,
+// so re-running this for the same delivery returns the existing event silently.
+export function createDeliveryNotification({ userId, parcelId, parcelLabel, provider }) {
+  const labelText = parcelLabel || provider || 'Your parcel'
+  const message = `${labelText} has been delivered — confirm receipt and rate the experience.`
+  try {
+    const result = getDb().prepare(`
+      INSERT INTO notification_events (user_id, parcel_id, type, message)
+      VALUES (?, ?, 'delivery_confirmation', ?)
+    `).run(userId, parcelId, message)
+    return { id: result.lastInsertRowid, created: true }
+  } catch (err) {
+    // UNIQUE violation — notification already exists for this parcel
+    if (String(err.message).includes('UNIQUE')) return { created: false }
+    throw err
+  }
+}
+
+export function listEventsForUser(userId, { limit = 20 } = {}) {
+  return getDb().prepare(`
+    SELECT n.id, n.parcel_id, n.type, n.message, n.read_at, n.created_at,
+           p.tracking_number, p.provider, p.status, p.label
+    FROM notification_events n
+    LEFT JOIN parcels p ON p.id = n.parcel_id
+    WHERE n.user_id = ?
+    ORDER BY n.created_at DESC
+    LIMIT ?
+  `).all(userId, limit)
+}
+
+export function countUnread(userId) {
+  const row = getDb().prepare(`
+    SELECT COUNT(*) AS n FROM notification_events
+    WHERE user_id = ? AND read_at IS NULL
+  `).get(userId)
+  return row.n
+}
+
+// Returns true if a row was updated. IDOR-safe: WHERE clause includes user_id,
+// so trying to mark someone else's notification read yields 0 rows updated.
+export function markRead(notificationId, userId) {
+  const result = getDb().prepare(`
+    UPDATE notification_events
+    SET read_at = datetime('now')
+    WHERE id = ? AND user_id = ? AND read_at IS NULL
+  `).run(notificationId, userId)
+  return result.changes > 0
+}
+
+// Used by the rating flow to auto-mark the matching delivery notification read
+// when the user submits their rating from the modal.
+export function markDeliveryNotificationRead({ userId, parcelId }) {
+  getDb().prepare(`
+    UPDATE notification_events
+    SET read_at = datetime('now')
+    WHERE user_id = ? AND parcel_id = ? AND type = 'delivery_confirmation' AND read_at IS NULL
+  `).run(userId, parcelId)
+}
