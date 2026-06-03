@@ -1,14 +1,3 @@
-# T-SEC-02 — Semgrep SAST.
-# Runs static analysis on every PR and push to main. Results are uploaded
-# to the GitHub Security tab in SARIF format. Pull-request scans only
-# report findings introduced by the diff (semgrep ci handles this).
-#
-# Rule packs used:
-#   p/ci              — Semgrep's curated CI ruleset
-#   p/javascript      — JS / TS specific
-#   p/react           — React-specific bad patterns
-#   p/owasp-top-ten   — OWASP Top 10 coverage
-
 name: Semgrep SAST
 
 on:
@@ -20,13 +9,12 @@ on:
 
 permissions:
   contents: read
-  security-events: write  # required for SARIF upload
+  security-events: write
 
 jobs:
   semgrep:
     name: Semgrep scan
     runs-on: ubuntu-latest
-    # Skip dependabot PRs to avoid permission noise
     if: github.actor != 'dependabot[bot]'
     container:
       image: semgrep/semgrep
@@ -35,17 +23,16 @@ jobs:
 
       - name: Run Semgrep
         run: |
-          semgrep ci \
+          semgrep scan \
             --config=p/ci \
             --config=p/javascript \
             --config=p/react \
             --config=p/owasp-top-ten \
             --sarif --output=semgrep-results.sarif \
             --error
-        # --error makes the job fail on any blocking finding
 
       - name: Upload SARIF to GitHub Security tab
-        if: always()  # upload even on failure so findings are visible
+        if: always()
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: semgrep-results.sarif
