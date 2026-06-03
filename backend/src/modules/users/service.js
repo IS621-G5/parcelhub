@@ -36,3 +36,9 @@ export async function verifyCredentials(email, password) {
   const ok = await bcrypt.compare(password, user.password_hash)
   return ok ? { id: user.id, email: user.email } : null
 }
+
+export function updatePassword(userId, passwordHash) {
+  return getDb().prepare(`
+    UPDATE users SET password_hash = ? WHERE id = ?
+  `).run(passwordHash, userId)
+}

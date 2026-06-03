@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api.js'
+import NotificationBell from './NotificationBell.jsx'
+import ConfirmRateModal from './ConfirmRateModal.jsx'
+import LinkedAccountsModal from './LinkedAccountsModal.jsx'
 
 // Status → visual config
 const STATUS_CONFIG = {
@@ -21,23 +24,60 @@ const FILTERS = [
   { key: 'delivered',  label: 'Delivered' },
 ]
 
-export default function Dashboard({ user, onLogout }) {
+export default function Dashboard({ user, onLogout, oauthFeedback, onClearOAuthFeedback }) {
   const [parcels, setParcels] = useState([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('all')
   const [showAdd, setShowAdd] = useState(false)
+  // Sprint 2 — US2.8 / US4.2 / US2.9.x
+  const [rateModal, setRateModal] = useState(null)   // { parcelId, notificationId?, parcel }
+  const [showLinked, setShowLinked] = useState(false)
+  const [linkedCount, setLinkedCount] = useState(0)
+  const [linkedProviders, setLinkedProviders] = useState([])
+  const [bellKey, setBellKey] = useState(0)          // bumps to force NotificationBell refresh
 
   async function reload() {
     setLoading(true)
     try {
-      const list = await api.parcels.list()
+      const [list, linked] = await Promise.all([
+        api.parcels.list(),
+        api.linked.list().catch(() => []),
+      ])
       setParcels(list)
+      const active = (linked || []).filter(a => a.status !== 'deleted')
+      setLinkedCount(active.length)
+      setLinkedProviders(active.map(a => a.provider))
     } finally {
       setLoading(false)
     }
   }
 
   useEffect(() => { reload() }, [])
+
+  // After a successful OAuth connect, refresh parcels so the new imports show up
+  useEffect(() => {
+    if (oauthFeedback?.type === 'success') reload()
+  }, [oauthFeedback])
+
+  async function onMockDeliver(parcelId) {
+    try {
+      await api.parcels.mockDeliver(parcelId)
+      await reload()
+      setBellKey(k => k + 1)
+    } catch (err) {
+      alert('Mock deliver failed: ' + (err.data?.error || err.message))
+    }
+  }
+
+  function onRateRequested(p) {
+    setRateModal({ parcelId: p.id, parcel: p })
+  }
+
+  function onRateSubmitted() {
+    setRateModal(null)
+    reload()
+    setBellKey(k => k + 1)
+  }
 
   const counts = useMemo(() => {
     const c = { exception: 0, stuck: 0, in_transit: 0, delivered: 0, total: parcels.length }
@@ -79,12 +119,46 @@ export default function Dashboard({ user, onLogout }) {
         </div>
         <div className="topbar-right">
           <span className="user-email">{user.email}</span>
+          <NotificationBell
+            refreshKey={bellKey}
+            onOpenRate={({ parcelId, parcel }) => setRateModal({ parcelId, parcel })}
+          />
           <div className="divider" />
           <button className="btn-ghost" onClick={onLogout}>Sign out</button>
         </div>
       </header>
 
       <main className="dash-main">
+        {oauthFeedback && (
+          <div className={`oauth-toast ${oauthFeedback.type}`}>
+            <span className="toast-icon">{oauthFeedback.type === 'success' ? '✓' : '⚠️'}</span>
+            <span>{oauthFeedback.message}</span>
+            <button className="toast-close" onClick={onClearOAuthFeedback} aria-label="Dismiss">✕</button>
+          </div>
+        )}
+
+        {/* Anomaly hero — anomaly-first vision rendered as a top-of-page alert.
+            Only renders when there are parcels that need attention; otherwise
+            the dashboard stays clean. */}
+        {!loading && attentionCount > 0 && filter !== 'attention' && (
+          <div className="anomaly-banner">
+            <div className="anomaly-icon">!</div>
+            <div className="anomaly-body">
+              <div className="anomaly-title">
+                {attentionCount} parcel{attentionCount === 1 ? '' : 's'} need{attentionCount === 1 ? 's' : ''} your attention
+              </div>
+              <div className="anomaly-sub">
+                {counts.exception > 0 && <>{counts.exception} exception · </>}
+                {counts.stuck > 0 && <>{counts.stuck} stuck </>}
+                — surfaced first so you can act on what's actually slipping.
+              </div>
+            </div>
+            <button className="anomaly-cta" onClick={() => setFilter('attention')}>
+              View →
+            </button>
+          </div>
+        )}
+
         {/* Quick action cards */}
         <div className="quick-cards">
           <div className="quick-card dark" onClick={() => setShowAdd(true)}>
@@ -93,15 +167,21 @@ export default function Dashboard({ user, onLogout }) {
             <div className="qc-sub">Track a new shipment by tracking number</div>
             <div className="qc-cta">+ Add now</div>
           </div>
-          <div className="quick-card light" style={{ cursor: 'default' }}>
+          <div className="quick-card light" onClick={() => setShowLinked(true)}>
             <div className="qc-icon">🔗</div>
             <div className="qc-title">Linked accounts</div>
             <div className="qc-sub">
-              <strong>0 of 2</strong> connected · Shopee & Lazada auto-import
+              <strong>{linkedCount} of 2</strong> connected · Shopee &amp; Lazada auto-import
             </div>
-            <div className="qc-sub" style={{ marginTop: 12, fontSize: 12, color: 'var(--ink-3)' }}>
-              Coming in Sprint 3+
+            <div className="linked-card-logos">
+              <div className={'mini ' + (linkedProviders.includes('shopee') ? 'shopee' : 'placeholder')}>
+                {linkedProviders.includes('shopee') ? 'S' : ''}
+              </div>
+              <div className={'mini ' + (linkedProviders.includes('lazada') ? 'lazada' : 'placeholder')}>
+                {linkedProviders.includes('lazada') ? 'L' : ''}
+              </div>
             </div>
+            <div className="qc-cta">{linkedCount === 0 ? '+ Connect' : 'Manage'}</div>
           </div>
         </div>
 
@@ -161,21 +241,23 @@ export default function Dashboard({ user, onLogout }) {
 
         {/* Parcel list */}
         {loading ? (
-          <p className="muted">Loading…</p>
+          <SkeletonList />
         ) : filtered.length === 0 ? (
-          <div className="empty">
-            <p>No parcels here yet.</p>
-            <button className="btn-primary" onClick={() => setShowAdd(true)}>
-              Add your first parcel
-            </button>
-          </div>
+          <EmptyState filter={filter} onAdd={() => setShowAdd(true)} />
         ) : (
           <div>
             {groups.map(g => (
               <div key={g.key}>
                 <div className="section-head">{g.label}</div>
                 <div className="parcel-list">
-                  {g.list.map(p => <ParcelRow key={p.id} p={p} />)}
+                  {g.list.map(p => (
+                    <ParcelRow
+                      key={p.id}
+                      p={p}
+                      onMockDeliver={() => onMockDeliver(p.id)}
+                      onRate={() => onRateRequested(p)}
+                    />
+                  ))}
                 </div>
               </div>
             ))}
@@ -189,25 +271,138 @@ export default function Dashboard({ user, onLogout }) {
           onCreated={() => { setShowAdd(false); reload() }}
         />
       )}
+
+      {rateModal && (
+        <ConfirmRateModal
+          parcelId={rateModal.parcelId}
+          parcel={rateModal.parcel}
+          onClose={() => setRateModal(null)}
+          onSubmitted={onRateSubmitted}
+        />
+      )}
+
+      {showLinked && (
+        <LinkedAccountsModal
+          onClose={() => setShowLinked(false)}
+          onChanged={reload}
+        />
+      )}
     </div>
   )
 }
 
-function ParcelRow({ p }) {
+function ParcelRow({ p, onMockDeliver, onRate }) {
   const cfg = configFor(p.status)
   const when = relativeTime(p.created_at)
+  const isDelivered = p.status === 'delivered'
   return (
     <div className={'parcel ' + cfg.rowMod}>
+      <div className={'parcel-avatar ' + providerKey(p.provider)} title={p.provider}>
+        {providerInitial(p.provider)}
+      </div>
       <div className="parcel-main">
         <div className="parcel-row1">
           <span className="parcel-label">{p.label || p.tracking_number}</span>
           <span className={'pill ' + cfg.pill}>{cfg.pillLabel}</span>
+          {p.rating_stars && (
+            <span className="parcel-rating-display" title={`Rated ${p.rating_stars}/5`}>
+              {[1,2,3,4,5].map(n => (
+                <span key={n} className={'star-mini ' + (n <= p.rating_stars ? '' : 'off')}>★</span>
+              ))}
+            </span>
+          )}
         </div>
         <div className="parcel-meta">
           {p.provider} · {p.tracking_number}
         </div>
       </div>
-      <div className="parcel-time">{when}</div>
+      <div className="parcel-actions">
+        {isDelivered ? (
+          <button className="row-btn row-btn-primary" onClick={onRate} title="Rate this delivery">
+            ★ {p.rating_stars ? 'Edit rating' : 'Rate'}
+          </button>
+        ) : (
+          <button className="row-btn" onClick={onMockDeliver} title="Demo: simulate courier delivery webhook">
+            Mark delivered
+          </button>
+        )}
+        <span className="parcel-time">{when}</span>
+      </div>
+    </div>
+  )
+}
+
+function providerKey(provider) {
+  if (!provider) return 'default'
+  return provider.toLowerCase().replace(/\s+/g, '-')
+}
+function providerInitial(provider) {
+  if (!provider) return '?'
+  // "DHL" → DHL, "Ninja Van" → NV, "Shopee" → S, "Lazada" → L, "SingPost" → SP
+  const compact = provider.replace(/[a-z]/g, '').replace(/[^A-Z]/g, '')
+  if (compact.length >= 2) return compact.slice(0, 2)
+  return provider[0].toUpperCase()
+}
+
+// Loading skeleton — 4 shimmer rows matching real parcel-row layout.
+function SkeletonList() {
+  return (
+    <>
+      <div className="section-head" style={{ visibility: 'hidden' }}>Loading</div>
+      <div className="skeleton-list">
+        {[1,2,3,4].map(i => (
+          <div className="skeleton-row" key={i}>
+            <div className="skeleton-block avatar" />
+            <div className="skeleton-stack">
+              <div className="skeleton-block line w70" />
+              <div className="skeleton-block line w40" />
+            </div>
+            <div className="skeleton-block pill" />
+          </div>
+        ))}
+      </div>
+    </>
+  )
+}
+
+// Empty state — different messaging per filter, with a subtle SVG illustration.
+function EmptyState({ filter, onAdd }) {
+  const copy = filter === 'attention'
+    ? { title: 'Nothing needs attention', body: 'All your parcels are either in transit or delivered. Nice.', cta: null }
+    : filter === 'delivered'
+    ? { title: 'No deliveries yet', body: 'Once parcels are delivered they\'ll show up here.', cta: null }
+    : filter === 'in_transit'
+    ? { title: 'No parcels in transit', body: 'Add a tracking number or connect a Shopee / Lazada account to start.', cta: 'Add a parcel' }
+    : { title: 'No parcels yet', body: 'Track a parcel manually, or connect a shop to auto-import your orders.', cta: 'Add your first parcel' }
+
+  return (
+    <div className="empty">
+      <div className="empty-illustration">
+        <svg viewBox="0 0 88 88" fill="none" xmlns="http://www.w3.org/2000/svg">
+          {/* Soft background blob */}
+          <circle cx="44" cy="44" r="40" fill="url(#blob-grad)" opacity="0.5" />
+          <defs>
+            <linearGradient id="blob-grad" x1="0" y1="0" x2="88" y2="88">
+              <stop offset="0%"   stopColor="#E0E7FF" />
+              <stop offset="100%" stopColor="#F1F5F9" />
+            </linearGradient>
+          </defs>
+          {/* Parcel box */}
+          <g transform="translate(20 24)">
+            <path d="M0 14 L24 0 L48 14 L48 38 L24 52 L0 38 Z" fill="white" stroke="#CBD5E1" strokeWidth="1.5" strokeLinejoin="round" />
+            <path d="M0 14 L24 28 L48 14" fill="none" stroke="#CBD5E1" strokeWidth="1.5" strokeLinejoin="round" />
+            <path d="M24 28 L24 52" stroke="#CBD5E1" strokeWidth="1.5" />
+            {/* Label */}
+            <rect x="10" y="32" width="14" height="4" rx="1" fill="#6366F1" opacity="0.4" />
+            <rect x="10" y="38" width="10" height="3" rx="1" fill="#6366F1" opacity="0.25" />
+          </g>
+        </svg>
+      </div>
+      <h3>{copy.title}</h3>
+      <p>{copy.body}</p>
+      {copy.cta && (
+        <button className="btn-primary" onClick={onAdd}>{copy.cta}</button>
+      )}
     </div>
   )
 }
