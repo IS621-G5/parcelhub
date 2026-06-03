@@ -1,0 +1,67 @@
+# Post-deploy smoke test — verifies the live deployment is healthy.
+#
+# Runs:
+#   - Hourly via cron (catches outages between CI runs)
+#   - On manual dispatch (after a release, to verify it landed cleanly)
+#   - After CI on main completes (gives Render ~3 min to deploy first)
+#
+# To use, set these two repo secrets:
+#   PROD_API_URL  — e.g. https://parcelhub-api-abc1.onrender.com
+#   PROD_WEB_URL  — e.g. https://parcelhub-web-xyz9.onrender.com
+
+name: Smoke — live deployment
+
+on:
+  schedule:
+    - cron: '15 * * * *'  # every hour at :15
+  workflow_run:
+    workflows: ["CI"]
+    branches: [main]
+    types: [completed]
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    name: Hit /health + /
+    runs-on: ubuntu-latest
+    # On workflow_run, only fire if the CI run was successful
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - name: Wait for Render to redeploy (only when chained off CI)
+        if: ${{ github.event_name == 'workflow_run' }}
+        run: sleep 180  # 3 minutes — typical Render free-tier deploy
+
+      - name: API health probe
+        env:
+          API: ${{ secrets.PROD_API_URL }}
+        run: |
+          if [ -z "$API" ]; then
+            echo "::warning::PROD_API_URL secret not set, skipping API probe"
+            exit 0
+          fi
+          echo "Probing $API/health"
+          # Cold-start tolerance: Render free tier can take up to 60s
+          for attempt in 1 2 3 4 5 6; do
+            status=$(curl -s -o /dev/null -w "%{http_code}" --max-time 60 "$API/health" || echo 000)
+            echo "attempt $attempt → HTTP $status"
+            if [ "$status" = "200" ]; then exit 0; fi
+            sleep 15
+          done
+          echo "::error::API health check failed after 6 attempts"
+          exit 1
+
+      - name: Web reachability probe
+        env:
+          WEB: ${{ secrets.PROD_WEB_URL }}
+        run: |
+          if [ -z "$WEB" ]; then
+            echo "::warning::PROD_WEB_URL secret not set, skipping web probe"
+            exit 0
+          fi
+          echo "Probing $WEB/"
+          status=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "$WEB/")
+          echo "HTTP $status"
+          if [ "$status" != "200" ]; then
+            echo "::error::Web returned non-200"
+            exit 1
+          fi
