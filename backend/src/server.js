@@ -5,6 +5,7 @@ import { config } from './config/index.js'
 import { getDb } from './db/index.js'
 import userRoutes from './modules/users/routes.js'
 import parcelRoutes from './modules/parcels/routes.js'
+import notificationRoutes from './modules/notifications/routes.js'
 
 export function buildApp() {
   const app = express()
@@ -31,6 +32,7 @@ export function buildApp() {
 
   app.use('/auth', userRoutes)
   app.use('/parcels', parcelRoutes)
+  app.use('/notifications', notificationRoutes)
 
   // Central error handler — never expose stack traces in JSON
   app.use((err, req, res, next) => {
