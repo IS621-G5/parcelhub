@@ -1,0 +1,6 @@
+# False positives — test fixtures and .env example placeholders, not real secrets.
+# These are from historical commit e20101c (since reset out of main, but still
+# in reflog / orphan objects which gitleaks scans).
+e20101cfc5fc65eb8a8e9478a6d07120702d9f04:backend/.env.example:generic-api-key:8
+e20101cfc5fc65eb8a8e9478a6d07120702d9f04:backend/tests/helpers/setupDb.js:generic-api-key:9
+e20101cfc5fc65eb8a8e9478a6d07120702d9f04:backend/tests/send.parcel.test.js:generic-api-key:88
