@@ -60,16 +60,25 @@ jobs:
   image-scan:
     name: Trivy — backend Docker image
     runs-on: ubuntu-latest
-    # Only runs once Commit "Docker + Render" lands a Dockerfile.
-    # Until then, this job is skipped — fs-scan still covers npm CVEs.
-    if: hashFiles('backend/Dockerfile') != ''
     steps:
       - uses: actions/checkout@v4
 
+      - name: Check if backend/Dockerfile exists yet
+        id: check
+        run: |
+          if [ -f backend/Dockerfile ]; then
+            echo "skip=false" >> $GITHUB_OUTPUT
+          else
+            echo "::notice::backend/Dockerfile not present yet — image scan skipped"
+            echo "skip=true" >> $GITHUB_OUTPUT
+          fi
+
       - name: Build backend image (no push)
+        if: steps.check.outputs.skip == 'false'
         run: docker build -t parcelhub-backend:scan ./backend
 
       - name: Scan backend image for CVEs
+        if: steps.check.outputs.skip == 'false'
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: parcelhub-backend:scan
@@ -80,7 +89,7 @@ jobs:
           output: trivy-image.sarif
 
       - name: Upload image SARIF
-        if: always()
+        if: always() && steps.check.outputs.skip == 'false'
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: trivy-image.sarif
