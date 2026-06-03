@@ -33,7 +33,7 @@ jobs:
 
       - name: Upload backend SARIF
         if: always()
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-backend.sarif
           category: trivy-backend-fs
@@ -52,7 +52,7 @@ jobs:
 
       - name: Upload frontend SARIF
         if: always()
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-frontend.sarif
           category: trivy-frontend-fs
@@ -90,7 +90,7 @@ jobs:
 
       - name: Upload image SARIF
         if: always() && steps.check.outputs.skip == 'false'
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-image.sarif
           category: trivy-backend-image
