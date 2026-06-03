@@ -1,0 +1,91 @@
+# T-SEC-03 — Trivy vulnerability scanning.
+# Two scans per run:
+#   1. Filesystem scan of npm dependencies (backend + frontend)
+#   2. Docker image scan of the built backend image
+# CI fails on CRITICAL severity. HIGH is reported but doesn't break the build,
+# matching a "fail-on-exploitable" policy.
+
+name: Trivy CVE scan
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  schedule:
+    - cron: '0 6 * * 1'  # weekly Monday 06:00 UTC, catches newly-disclosed CVEs
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  fs-scan:
+    name: Trivy — npm filesystem scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Scan backend dependencies
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: backend
+          severity: CRITICAL,HIGH
+          exit-code: 1
+          ignore-unfixed: true
+          format: sarif
+          output: trivy-backend.sarif
+
+      - name: Upload backend SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-backend.sarif
+          category: trivy-backend-fs
+
+      - name: Scan frontend dependencies
+        if: always()
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: frontend
+          severity: CRITICAL,HIGH
+          exit-code: 1
+          ignore-unfixed: true
+          format: sarif
+          output: trivy-frontend.sarif
+
+      - name: Upload frontend SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-frontend.sarif
+          category: trivy-frontend-fs
+
+  image-scan:
+    name: Trivy — backend Docker image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build backend image (no push)
+        run: docker build -t parcelhub-backend:scan ./backend
+
+      - name: Scan backend image for CVEs
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: parcelhub-backend:scan
+          severity: CRITICAL
+          exit-code: 1
+          ignore-unfixed: true
+          format: sarif
+          output: trivy-image.sarif
+
+      - name: Upload image SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-image.sarif
+          category: trivy-backend-image
