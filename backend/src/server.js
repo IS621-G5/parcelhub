@@ -1,6 +1,7 @@
 import express from 'express'
 import session from 'express-session'
 import cors from 'cors'
+import helmet from 'helmet'
 import { config } from './config/index.js'
 import { getDb } from './db/index.js'
 import userRoutes from './modules/users/routes.js'
@@ -10,11 +11,39 @@ import notificationRoutes from './modules/notifications/routes.js'
 export function buildApp() {
   const app = express()
 
+  // ─── T-SEC-04: Runtime hardening ─────────────────────────────────────
+  // Helmet ships sensible defaults:
+  //   X-Content-Type-Options: nosniff   (no MIME-sniffing)
+  //   X-Frame-Options: SAMEORIGIN       (clickjacking defense)
+  //   X-DNS-Prefetch-Control: off
+  //   Strict-Transport-Security         (when over HTTPS)
+  //   Referrer-Policy: no-referrer
+  // CSP is disabled because we're a JSON API, not an HTML server.
+  app.use(helmet({
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false,
+  }))
+
+  // ─── CORS allowlist mode (not wildcard) ─────────────────────────────
+  // Only requests with Origin == config.frontendOrigin succeed. Requests
+  // with no Origin (curl, same-origin SSR) also allowed because the
+  // browser only enforces CORS for cross-origin requests.
   app.use(cors({
-    origin: config.frontendOrigin,
+    origin: (origin, cb) => {
+      if (!origin) return cb(null, true)
+      if (origin === config.frontendOrigin) return cb(null, true)
+      cb(null, false)
+    },
     credentials: true,
   }))
   app.use(express.json({ limit: '100kb' }))
+
+  // Behind a reverse proxy (Render, Fly, Railway, nginx) we need to trust
+  // X-Forwarded-Proto so express-session knows the request is over HTTPS
+  // and is willing to set Secure cookies.
+  if (config.isProduction) {
+    app.set('trust proxy', 1)
+  }
 
   app.use(session({
     secret: config.sessionSecret,
@@ -22,7 +51,9 @@ export function buildApp() {
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
-      sameSite: 'lax',
+      // Cross-site cookies (frontend.onrender.com → backend.onrender.com)
+      // need SameSite=None + Secure. Local dev uses Lax over HTTP.
+      sameSite: config.isProduction ? 'none' : 'lax',
       secure: config.isProduction,
       maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
     },
@@ -36,22 +67,9 @@ export function buildApp() {
 
   // Central error handler — never expose stack traces in JSON
   app.use((err, req, res, next) => {
-    console.error('[error]', err)
-    res.status(500).json({ error: 'internal_error' })
+    console.error('Unhandled error:', err)
+    res.status(500).json({ error: 'internal_server_error' })
   })
 
   return app
-}
-
-// Only start the HTTP listener when this file is run directly, not when
-// imported by the test suite.
-const isMain = import.meta.url === `file://${process.argv[1]}`
-if (isMain) {
-  // Initialize DB up front so the first request isn't slowed
-  getDb()
-  const app = buildApp()
-  app.listen(config.port, () => {
-    console.log(`[server] listening on http://localhost:${config.port}`)
-    console.log(`[server] frontend allowed: ${config.frontendOrigin}`)
-  })
 }
