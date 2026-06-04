@@ -1,30 +1,8 @@
-# Render.com Blueprint — `render.yaml` deploys both services in one click.
-#
-# Steps to deploy:
-#   1. Push this repo to GitHub
-#   2. Go to https://dashboard.render.com → Blueprints → New Blueprint Instance
-#   3. Point at your repo → Apply
-#   4. Render auto-detects this file and creates 2 services:
-#        - parcelhub-api      (backend, Docker, web service)
-#        - parcelhub-web      (frontend, static site)
-#   5. Two env vars need filling in (Render will prompt; mark "sync: false"):
-#        - SESSION_SECRET       — long random string
-#        - TOKEN_ENCRYPTION_KEY — 64 hex chars (32 bytes)
-#        - FRONTEND_ORIGIN      — set to the parcelhub-web URL after first deploy
-#   6. After parcelhub-web finishes building, copy its onrender.com URL,
-#      paste into parcelhub-api's FRONTEND_ORIGIN env var, redeploy. Done.
-#
-# Free tier notes:
-#   - SQLite data is EPHEMERAL on the free tier (Render disks are paid).
-#     Restarts wipe the DB. Acceptable for grading demos.
-#   - Backend free-tier cold start is ~50s for the first request after idle.
-#     For grading, "warm up" by visiting the site once before showing graders.
-
 services:
   - type: web
     name: parcelhub-api
     runtime: docker
-    plan: free
+    plan: free                  # ← backend 的 plan: free 保留
     rootDir: backend
     healthCheckPath: /health
     envVars:
@@ -37,25 +15,24 @@ services:
       - key: DB_PATH
         value: /data/parcelhub.db
       - key: SESSION_SECRET
-        sync: false   # set manually in Render dashboard — use a long random string
+        sync: false
       - key: TOKEN_ENCRYPTION_KEY
-        sync: false   # 64 hex chars (32 bytes) — node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+        sync: false
       - key: FRONTEND_ORIGIN
-        sync: false   # set to https://parcelhub-web-<hash>.onrender.com after web deploys
+        sync: false
 
   - type: web
     name: parcelhub-web
     runtime: static
-    plan: free
+    # ← 这里不要再放 plan: free,static site 默认就免费
     rootDir: frontend
     buildCommand: npm ci && npm run build
     staticPublishPath: dist
     pullRequestPreviewsEnabled: false
     envVars:
       - key: VITE_API_BASE
-        sync: false   # set to https://parcelhub-api-<hash>.onrender.com after api deploys
+        sync: false
     headers:
-      # SPA fallback — every URL serves index.html so /?reset=… and /?oauth_code=… work
       - path: /*
         name: Cache-Control
         value: no-cache
