@@ -73,3 +73,15 @@ export function buildApp() {
 
   return app
 }
+
+// ──── Start the HTTP listener ───────────────────────────────────────
+// Skipped in tests — Supertest mounts buildApp() directly and we mustn't
+// hold open a real port. NODE_ENV=test is set by the test runner.
+if (process.env.NODE_ENV !== 'test') {
+  getDb()
+  const app = buildApp()
+  app.listen(config.port, () => {
+    console.log(`[server] listening on http://localhost:${config.port}`)
+    console.log(`[server] frontend allowed: ${config.frontendOrigin}`)
+  })
+}
