@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { z } from 'zod'
-import rateLimit from 'express-rate-limit'
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit'
 import {
   listParcelsForUser, createParcel, findParcelForUser, existsForUser,
   updateParcel, archiveParcel, restoreParcel,
@@ -30,7 +30,7 @@ const updateSchema = z.object({
 const createParcelLimit = rateLimit({
   windowMs: 60_000,
   max: 10,
-  keyGenerator: (req) => `parcels-create-${req.userId || req.ip}`,
+  keyGenerator: (req) => `parcels-create-${req.userId || ipKeyGenerator(req)}`,
   message: { error: 'rate_limited', retry_after_seconds: 60 },
   skip: () => process.env.NODE_ENV === 'test',  // bypass in tests
 })
@@ -39,7 +39,7 @@ const createParcelLimit = rateLimit({
 const detailLimit = rateLimit({
   windowMs: 60_000,
   max: 30,
-  keyGenerator: (req) => `parcels-detail-${req.userId || req.ip}`,
+  keyGenerator: (req) => `parcels-detail-${req.userId || ipKeyGenerator(req)}`,
   message: { error: 'rate_limited', retry_after_seconds: 60 },
   skip: () => process.env.NODE_ENV === 'test',  // bypass in tests
 })
