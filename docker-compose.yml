@@ -1,0 +1,41 @@
+# ParcelHub — full stack: backend + frontend
+#
+# Usage:
+#   docker compose up --build
+#
+# Then open: http://localhost:8080
+# Backend API: http://localhost:3001
+
+services:
+  backend:
+    build: ./backend
+    container_name: parcelhub_backend
+    ports:
+      - "3001:3001"
+    environment:
+      PORT: 3001
+      # Override these via .env or your secret store in real deployments
+      SESSION_SECRET: ${SESSION_SECRET:-please_change_me_to_at_least_32_random_characters_long}
+      BCRYPT_COST: 10
+      FRONTEND_ORIGIN: http://localhost:8080
+      DB_PATH: /data/parcelhub.db
+      TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY:-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}
+      # NODE_ENV is intentionally NOT set to 'production' for the demo, so the
+      # session cookie's `secure` flag stays false (the demo is over plain
+      # HTTP). For a real deployment behind HTTPS, set NODE_ENV=production
+      # and provide strong values for SESSION_SECRET and TOKEN_ENCRYPTION_KEY.
+    volumes:
+      - parcelhub_data:/data
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    container_name: parcelhub_frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  parcelhub_data:
