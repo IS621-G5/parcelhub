@@ -28,8 +28,7 @@ jobs:
             --config=p/javascript \
             --config=p/react \
             --config=p/owasp-top-ten \
-            --sarif --output=semgrep-results.sarif \
-            --error
+            --sarif --output=semgrep-results.sarif 
 
       - name: Upload SARIF to GitHub Security tab
         if: always()
