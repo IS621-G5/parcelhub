@@ -3,6 +3,7 @@ import { api } from '../api.js'
 import NotificationBell from './NotificationBell.jsx'
 import ConfirmRateModal from './ConfirmRateModal.jsx'
 import LinkedAccountsModal from './LinkedAccountsModal.jsx'
+import ParcelDetailModal from './ParcelDetailModal.jsx'
 
 // Status → visual config
 const STATUS_CONFIG = {
@@ -35,6 +36,7 @@ export default function Dashboard({ user, onLogout, oauthFeedback, onClearOAuthF
   const [linkedCount, setLinkedCount] = useState(0)
   const [linkedProviders, setLinkedProviders] = useState([])
   const [bellKey, setBellKey] = useState(0)          // bumps to force NotificationBell refresh
+  const [detailParcel, setDetailParcel] = useState(null)   // US2.4 detail view
 
   async function reload() {
     setLoading(true)
@@ -256,6 +258,7 @@ export default function Dashboard({ user, onLogout, oauthFeedback, onClearOAuthF
                       p={p}
                       onMockDeliver={() => onMockDeliver(p.id)}
                       onRate={() => onRateRequested(p)}
+                      onOpen={() => setDetailParcel(p)}
                     />
                   ))}
                 </div>
@@ -281,6 +284,17 @@ export default function Dashboard({ user, onLogout, oauthFeedback, onClearOAuthF
         />
       )}
 
+      {detailParcel && (
+        <ParcelDetailModal
+          parcel={detailParcel}
+          onClose={() => setDetailParcel(null)}
+          onDeleted={(id) => {
+            setParcels(prev => prev.filter(x => x.id !== id))
+            setDetailParcel(null)
+          }}
+        />
+      )}
+
       {showLinked && (
         <LinkedAccountsModal
           onClose={() => setShowLinked(false)}
@@ -291,12 +305,12 @@ export default function Dashboard({ user, onLogout, oauthFeedback, onClearOAuthF
   )
 }
 
-function ParcelRow({ p, onMockDeliver, onRate }) {
+function ParcelRow({ p, onMockDeliver, onRate, onOpen }) {
   const cfg = configFor(p.status)
   const when = relativeTime(p.created_at)
   const isDelivered = p.status === 'delivered'
   return (
-    <div className={'parcel ' + cfg.rowMod}>
+    <div className={'parcel ' + cfg.rowMod} onClick={onOpen} style={{ cursor: 'pointer' }}>
       <div className={'parcel-avatar ' + providerKey(p.provider)} title={p.provider}>
         {providerInitial(p.provider)}
       </div>
@@ -316,7 +330,7 @@ function ParcelRow({ p, onMockDeliver, onRate }) {
           {p.provider} · {p.tracking_number}
         </div>
       </div>
-      <div className="parcel-actions">
+      <div className="parcel-actions" onClick={e => e.stopPropagation()}>
         {isDelivered ? (
           <button className="row-btn row-btn-primary" onClick={onRate} title="Rate this delivery">
             ★ {p.rating_stars ? 'Edit rating' : 'Rate'}

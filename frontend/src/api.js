@@ -39,6 +39,8 @@ export const api = {
     // Sprint 2 — US2.8 + US4.2: one endpoint, two flows
     rate:        (id, stars, comment)   => request('PUT',  `/parcels/${id}/rating`, { stars, comment }),
     getRating:   (id)                   => request('GET',  `/parcels/${id}/rating`),
+    get:         (id)                   => request('GET',  `/parcels/${id}`),
+    remove:      (id)                   => request('DELETE', `/parcels/${id}`),
   },
 
   // Sprint 2 — US2.8: in-app notification events
