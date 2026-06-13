@@ -85,7 +85,7 @@ describe('Sprint 2 — Send Parcel (US3.1, US3.2, US3.3)', () => {
 
     const res = await agent
       .post(`/send/drafts/${draft.id}/confirm`)
-      .send({ idempotency_token: 'tok-abc-12345' })
+      .send({ idempotency_token: 'test-idem-key-0001' })
 
     expect(res.status).toBe(409)
     expect(res.body.error).toBe('no_courier_selected')
