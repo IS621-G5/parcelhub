@@ -33,10 +33,14 @@ router.get('/:provider/start', requireAuth, (req, res) => {
   // redirect_uri, scope, state. Here we point at a frontend mock page.
   const authorizeUrl = `${process.env.FRONTEND_ORIGIN || 'http://localhost:5173'}` +
     `/mock-oauth?provider=${provider}&redirect=${encodeURIComponent('/oauth/callback')}`
+  // CSRF: bind the state to this server-side session so the callback can verify
+  // the authorization response came from a flow this session actually started.
+  const state = `state_${provider}_${req.sessionID}_${Date.now()}`
+  req.session.oauthState = { provider, value: state }
   res.json({
     authorize_url: authorizeUrl,
     provider,
-    state: `state_${provider}_${Date.now()}`,
+    state,
   })
 })
 
@@ -45,6 +49,7 @@ router.get('/:provider/start', requireAuth, (req, res) => {
 // "approves" and returns a code.
 const callbackSchema = z.object({
   code: z.string().min(3).max(200),
+  state: z.string().max(200).optional(),
   import_orders: z.boolean().optional(),  // default true
 }).strict()
 
@@ -56,6 +61,17 @@ router.post('/:provider/callback', requireAuth, (req, res, next) => {
     }
     const parsed = callbackSchema.safeParse(req.body)
     if (!parsed.success) return res.status(400).json({ error: 'invalid_input' })
+
+    // CSRF: if this session started an OAuth flow (state stored in /start), the
+    // returned state must match it. Consume the stored state either way so it
+    // can't be replayed. Sessions that never went through /start (e.g. direct
+    // API calls) have no stored state and skip this check — the mock's
+    // documented convenience path.
+    const expected = req.session.oauthState
+    delete req.session.oauthState
+    if (expected && (expected.provider !== provider || expected.value !== parsed.data.state)) {
+      return res.status(400).json({ error: 'state_mismatch' })
+    }
 
     // Step 1: exchange code for tokens via adapter
     const adapter = getAdapter(provider)
@@ -85,7 +101,6 @@ router.post('/:provider/callback', requireAuth, (req, res, next) => {
       importResult = importOrdersFromLinkedAccount({
         userId: req.userId,
         linkedAccountId: linkedAccount.id,
-        provider,
       })
     }
 
@@ -115,7 +130,6 @@ router.post('/:provider/import', requireAuth, (req, res, next) => {
     const result = importOrdersFromLinkedAccount({
       userId: req.userId,
       linkedAccountId: parsed.data.linked_account_id,
-      provider,
       sinceDays: parsed.data.since_days,
     })
     if (result.error === 'linked_account_not_found_or_inactive') {

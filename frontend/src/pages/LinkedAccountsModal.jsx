@@ -20,12 +20,6 @@ const PROVIDERS = [
 
 const OAUTH_STATE_KEY = 'parcelhub.oauth.state'
 
-function randomState() {
-  const bytes = new Uint8Array(16)
-  crypto.getRandomValues(bytes)
-  return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('')
-}
-
 export default function LinkedAccountsModal({ onClose, onChanged }) {
   const [linked, setLinked] = useState([])
   const [busy, setBusy] = useState(false)
@@ -44,16 +38,24 @@ export default function LinkedAccountsModal({ onClose, onChanged }) {
     return linked.find(a => a.provider === providerKey && a.status !== 'deleted')
   }
 
-  function startOAuth(provider) {
-    // Real OAuth pattern: generate a state token, save it, then NAVIGATE
-    // to the provider's authorize URL. The callback path validates the
-    // state matches (CSRF defense).
-    const state = randomState()
-    sessionStorage.setItem(OAUTH_STATE_KEY, state)
-    const redirectUri = window.location.origin + window.location.pathname
-    const authorizeUrl = `${window.location.origin}/?oauth_authorize=${provider.key}` +
-      `&state=${state}&redirect_uri=${encodeURIComponent(redirectUri)}`
-    window.location.assign(authorizeUrl)
+  async function startOAuth(provider) {
+    // Real OAuth pattern: the backend /start issues a state token bound to our
+    // server-side session, we stash it for the client-side check, then NAVIGATE
+    // to the provider's authorize URL. The callback validates the state both
+    // client-side (App.jsx) and server-side (CSRF defense).
+    setError('')
+    setBusy(true)
+    try {
+      const { state } = await api.oauth.start(provider.key)
+      sessionStorage.setItem(OAUTH_STATE_KEY, state)
+      const redirectUri = window.location.origin + window.location.pathname
+      const authorizeUrl = `${window.location.origin}/?oauth_authorize=${provider.key}` +
+        `&state=${encodeURIComponent(state)}&redirect_uri=${encodeURIComponent(redirectUri)}`
+      window.location.assign(authorizeUrl)
+    } catch {
+      setBusy(false)
+      setError('Could not start the connection. Please try again.')
+    }
   }
 
   async function disconnect(account, providerLabel) {

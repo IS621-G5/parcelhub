@@ -9,8 +9,23 @@ import { requireAuth } from '../../middleware/auth.js'
 
 const router = Router()
 
+// Rotate the session ID on privilege elevation (login/register) to defeat
+// session fixation: any pre-auth session an attacker may have planted is
+// discarded and a fresh authenticated session is issued.
+function regenerateSession(req) {
+  return new Promise((resolve, reject) => {
+    req.session.regenerate(err => (err ? reject(err) : resolve()))
+  })
+}
+
+// Email is normalized (trimmed + lowercased) before validation so that
+// "User@X.com" and "user@x.com" map to the same account — the email column
+// is case-sensitive UNIQUE, so without this the duplicate check is bypassable
+// and login/forgot fail for a differently-cased address than was registered.
+const emailField = z.string().trim().toLowerCase().pipe(z.string().email().max(254))
+
 const registerSchema = z.object({
-  email: z.string().email().max(254),
+  email: emailField,
   password: z.string()
     .min(8, 'password must be at least 8 characters')
     .max(128)
@@ -18,14 +33,14 @@ const registerSchema = z.object({
 })
 
 const loginSchema = z.object({
-  email: z.string().email().max(254),
+  email: emailField,
   password: z.string().min(1).max(128),
 })
 
 // Sprint 1, US1.3 — same password rules as register so a successful reset
 // always yields a password that meets the login policy.
 const forgotSchema = z.object({
-  email: z.string().email().max(254),
+  email: emailField,
 })
 
 const resetSchema = z.object({
@@ -69,6 +84,7 @@ router.post('/register', registerLimit, async (req, res, next) => {
     }
 
     const user = await createUser({ email, password })
+    await regenerateSession(req)
     req.session.userId = user.id
     res.status(201).json(user)
   } catch (err) { next(err) }
@@ -83,6 +99,7 @@ router.post('/login', loginLimit, async (req, res, next) => {
     const user = await verifyCredentials(parsed.data.email, parsed.data.password)
     if (!user) return res.status(401).json({ error: 'invalid_credentials' })
 
+    await regenerateSession(req)
     req.session.userId = user.id
     res.json(user)
   } catch (err) { next(err) }

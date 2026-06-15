@@ -43,8 +43,8 @@ router.post('/:id/read', requireAuth, (req, res) => {
   const id = Number(req.params.id)
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'invalid_id' })
   const ok = markRead(id, req.userId)
-  // IDOR-safe: if the notification doesn't exist OR belongs to another user
-  // OR is already read, we return 404. No info leak about which case.
+  // IDOR-safe: 404 only when the notification doesn't exist or belongs to
+  // another user. Marking an already-read notification is idempotent → 204.
   if (!ok) return res.status(404).json({ error: 'not_found' })
   res.status(204).end()
 })

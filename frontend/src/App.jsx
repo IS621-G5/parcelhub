@@ -99,7 +99,10 @@ export default function App() {
       return
     }
     try {
-      const result = await api.oauth.callback(oauthProvider, oauthCode)
+      // Send the state to the backend too — it validates against the
+      // session-bound state issued by /start (server-side CSRF check), on top
+      // of the client-side check above.
+      const result = await api.oauth.callback(oauthProvider, oauthCode, oauthState)
       if (result.error) {
         setOauthFeedback({
           type: 'error',
@@ -120,6 +123,7 @@ export default function App() {
         const successMsg = `${provName} connected — ${parts.join(' · ')}.`
         if (imported > 0) {
           // Stash the message so it survives the reload that refreshes the list
+          sessionStorage.setItem('oauth_flash', successMsg)
           window.history.replaceState({}, '', window.location.pathname)
           window.location.reload()
         } else {

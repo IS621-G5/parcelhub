@@ -57,7 +57,7 @@ export const api = {
   },
   oauth: {
     start:       (provider)                       => request('GET',  `/oauth/${provider}/start`),
-    callback:    (provider, code)                 => request('POST', `/oauth/${provider}/callback`, { code }),
+    callback:    (provider, code, state)          => request('POST', `/oauth/${provider}/callback`, { code, state }),
     sync:        (provider, linkedAccountId)      => request('POST', `/oauth/${provider}/import`, { linked_account_id: linkedAccountId }),
   },
 }

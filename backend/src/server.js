@@ -43,9 +43,11 @@ export function buildApp() {
   app.use(express.json({ limit: '100kb' }))
 
   // Behind a reverse proxy (Render, Fly, Railway, nginx) we need to trust
-  // X-Forwarded-Proto so express-session knows the request is over HTTPS
-  // and is willing to set Secure cookies.
-  if (config.isProduction) {
+  // X-Forwarded-Proto so express-session knows the request is over HTTPS and is
+  // willing to set Secure cookies — and so express-rate-limit keys on the real
+  // client IP, not the proxy's. Driven by config.trustProxy (TRUST_PROXY env or
+  // production) rather than NODE_ENV alone.
+  if (config.trustProxy) {
     app.set('trust proxy', 1)
   }
 

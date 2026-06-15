@@ -21,15 +21,30 @@ function loadDotEnv() {
 
 loadDotEnv()
 
+const isProduction = process.env.NODE_ENV === 'production'
+const isTest = process.env.NODE_ENV === 'test'
+
 export const config = {
   port: Number(process.env.PORT) || 3001,
   sessionSecret: process.env.SESSION_SECRET || 'dev_secret_change_in_production',
   bcryptCost: Number(process.env.BCRYPT_COST) || 10,
   frontendOrigin: process.env.FRONTEND_ORIGIN || 'http://localhost:5173',
   dbPath: process.env.DB_PATH || './parcelhub.db',
-  isProduction: process.env.NODE_ENV === 'production',
+  isProduction,
+  // Trust the reverse proxy (Render/Fly/nginx) so req.ip and Secure-cookie
+  // detection work. Driven by an explicit env var rather than NODE_ENV alone,
+  // so a deployment that forgets NODE_ENV=production still keys rate limits on
+  // the real client IP instead of the proxy's. Defaults on in production.
+  trustProxy: process.env.TRUST_PROXY
+    ? process.env.TRUST_PROXY !== '0' && process.env.TRUST_PROXY !== 'false'
+    : isProduction,
 }
 
-if (!process.env.SESSION_SECRET && config.isProduction) {
-  throw new Error('SESSION_SECRET is required in production')
+// A hardcoded session secret is only acceptable for local dev and tests.
+// Any deployment-like environment (production, staging, …) must supply its own,
+// otherwise session cookies could be forged with a publicly-known key. We allow
+// the fallback only when NODE_ENV is unset, 'development', or 'test'.
+const LOCAL_ENVS = new Set([undefined, 'development', 'test'])
+if (!process.env.SESSION_SECRET && !LOCAL_ENVS.has(process.env.NODE_ENV)) {
+  throw new Error('SESSION_SECRET is required outside local development')
 }

@@ -83,15 +83,23 @@ export function countUnread(userId) {
   return row.n
 }
 
-// Returns true if a row was updated. IDOR-safe: WHERE clause includes user_id,
-// so trying to mark someone else's notification read yields 0 rows updated.
+// Mark a notification read. Idempotent: marking an already-read notification
+// is a success (returns true), not a 404. Returns false only when the row does
+// not exist or is not owned by the user (IDOR-safe via the user_id predicate),
+// which the route maps to 404.
 export function markRead(notificationId, userId) {
-  const result = getDb().prepare(`
+  const db = getDb()
+  const row = db.prepare(`
+    SELECT read_at FROM notification_events WHERE id = ? AND user_id = ?
+  `).get(notificationId, userId)
+  if (!row) return false            // not found / not owned → 404
+  if (row.read_at) return true      // already read → idempotent success
+  db.prepare(`
     UPDATE notification_events
     SET read_at = datetime('now')
     WHERE id = ? AND user_id = ? AND read_at IS NULL
   `).run(notificationId, userId)
-  return result.changes > 0
+  return true
 }
 
 // Used by the rating flow to auto-mark the matching delivery notification read
