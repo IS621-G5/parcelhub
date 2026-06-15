@@ -92,6 +92,14 @@ export default function App() {
       return
     }
     try {
+      const result = await api.oauth.callback(oauthProvider, oauthCode)
+      if (result.error) {
+        setOauthFeedback({
+          type: 'error',
+          message: `Connection failed: ${result.error}`,
+        })
+        return
+      }
       const imp = result.import || {}
       const imported = imp.imported ?? 0
       const noTrack = imp.skipped_no_tracking ?? 0
@@ -106,6 +114,10 @@ export default function App() {
         type: 'success',
         message: `${provName} connected — ${parts.join(' · ')}.`,
       })
+
+      if (imported > 0) {
+        setTimeout(() => window.location.reload(), 1200)
+      }
     } catch (err) {
       setOauthFeedback({
         type: 'error',

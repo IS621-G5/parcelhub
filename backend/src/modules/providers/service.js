@@ -54,14 +54,14 @@ export function importOrdersFromLinkedAccount({ userId, linkedAccountId, provide
       userId,
       order.tracking_number,
       provider,
-      order.label || null,
+      order.label || `${provider.charAt(0).toUpperCase()}${provider.slice(1)} order ${order.tracking_number}`,
       order.status || 'in_transit',
     )
     importedParcels.push({
       id: result.lastInsertRowid,
       tracking_number: order.tracking_number,
       provider,
-      label: order.label || null,
+      label: order.label || `${provider.charAt(0).toUpperCase()}${provider.slice(1)} order ${order.tracking_number}`,
       status: order.status || 'in_transit',
     })
   }
