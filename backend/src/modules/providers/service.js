@@ -27,40 +27,50 @@ export function importOrdersFromLinkedAccount({ userId, linkedAccountId, provide
 
   const db = getDb()
   const importedParcels = []
-  let skipped = 0
+  let skippedNoTracking = 0
+  let skippedDuplicate = 0
 
   for (const order of orders) {
     if (!order.tracking_number) {
-      // Order placed but no tracking yet — skip for now, will appear on next import
-      skipped++
+      // Order placed but not shipped yet — no tracking number to follow.
+      // Will be imported automatically once it ships and gets one.
+      skippedNoTracking++
       continue
     }
 
     // Idempotency: skip if user already has this tracking number
-    const existing = db.prepare(`
+    const existing = getDb().prepare(`
       SELECT id FROM parcels WHERE user_id = ? AND tracking_number = ?
     `).get(userId, order.tracking_number)
     if (existing) {
-      skipped++
+      skippedDuplicate++
       continue
     }
 
-    const result = db.prepare(`
+    const result = getDb().prepare(`
       INSERT INTO parcels (user_id, tracking_number, provider, label, status)
-      VALUES (?, ?, ?, ?, 'in_transit')
+      VALUES (?, ?, ?, ?, ?)
     `).run(
       userId,
       order.tracking_number,
-      order.provider_courier,
-      order.item_summary,
+      provider,
+      order.label || null,
+      order.status || 'in_transit',
     )
     importedParcels.push({
       id: result.lastInsertRowid,
       tracking_number: order.tracking_number,
-      provider: order.provider_courier,
-      label: order.item_summary,
+      provider,
+      label: order.label || null,
+      status: order.status || 'in_transit',
     })
   }
 
-  return { imported: importedParcels.length, skipped, parcels: importedParcels }
+  return {
+    imported: importedParcels.length,
+    skipped: skippedNoTracking + skippedDuplicate,   // keep total for backward-compat
+    skipped_no_tracking: skippedNoTracking,
+    skipped_duplicate: skippedDuplicate,
+    parcels: importedParcels,
+  }
 }

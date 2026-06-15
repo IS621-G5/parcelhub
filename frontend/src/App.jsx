@@ -92,12 +92,19 @@ export default function App() {
       return
     }
     try {
-      const result = await api.oauth.callback(oauthProvider, oauthCode)
-      const imported = result.import?.imported ?? 0
-      const skipped = result.import?.skipped ?? 0
+      const imp = result.import || {}
+      const imported = imp.imported ?? 0
+      const noTrack = imp.skipped_no_tracking ?? 0
+      const dup = imp.skipped_duplicate ?? (imp.skipped ?? 0)  // fallback if backend not updated
+      const provName = `${oauthProvider[0].toUpperCase()}${oauthProvider.slice(1)}`
+
+      const parts = [`${imported} parcel${imported === 1 ? '' : 's'} imported`]
+      if (noTrack) parts.push(`${noTrack} not shipped yet`)
+      if (dup) parts.push(`${dup} already in your list`)
+
       setOauthFeedback({
         type: 'success',
-        message: `${oauthProvider[0].toUpperCase()}${oauthProvider.slice(1)} connected — ${imported} parcel${imported === 1 ? '' : 's'} imported${skipped ? `, ${skipped} skipped` : ''}.`,
+        message: `${provName} connected — ${parts.join(' · ')}.`,
       })
     } catch (err) {
       setOauthFeedback({
