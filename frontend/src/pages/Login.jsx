@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { api } from '../api.js'
 
-export default function Login({ onAuth, switchToSignup, switchToForgot }) {
-  const [email, setEmail] = useState('')
+export default function Login({ onAuth, switchToSignup, switchToForgot, notice, initialEmail }) {
+  const [email, setEmail] = useState(initialEmail || '')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -44,6 +44,8 @@ export default function Login({ onAuth, switchToSignup, switchToForgot }) {
         <form className="auth-form" onSubmit={onSubmit}>
           <h2>Welcome back</h2>
           <p className="subtitle">Sign in to view your parcels.</p>
+
+          {notice && <div className="info">{notice}</div>}
 
           <div className="field">
             <label htmlFor="login-email">Email</label>

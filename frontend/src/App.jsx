@@ -40,6 +40,8 @@ export default function App() {
   const [resetToken, setResetToken] = useState(null)
   const [mockOAuth, setMockOAuth] = useState(null)   // { provider, state, redirect_uri }
   const [oauthFeedback, setOauthFeedback] = useState(null)  // surfaces back to Dashboard
+  const [loginNotice, setLoginNotice] = useState(null)     // e.g. "Account created — please log in."
+  const [loginEmail, setLoginEmail] = useState('')         // prefilled on the login form after register
 
   useEffect(() => {
     // Show any OAuth success message stashed before a post-import reload
@@ -162,8 +164,15 @@ export default function App() {
 
   return (
     <div className="app">
-      {page === 'login'      && <Login          onAuth={onAuth} switchToSignup={() => setPage('signup')} switchToForgot={() => setPage('forgot')} />}
-      {page === 'signup'     && <Signup         onAuth={onAuth} switchToLogin={() => setPage('login')} />}
+      {page === 'login'      && <Login          onAuth={onAuth} notice={loginNotice} initialEmail={loginEmail}
+                                  switchToSignup={() => { setLoginNotice(null); setPage('signup') }}
+                                  switchToForgot={() => { setLoginNotice(null); setPage('forgot') }} />}
+      {page === 'signup'     && <Signup         switchToLogin={() => setPage('login')}
+                                  onRegistered={(email) => {
+                                    setLoginEmail(email)
+                                    setLoginNotice('Account created — please log in.')
+                                    setPage('login')
+                                  }} />}
       {page === 'forgot'     && <ForgotPassword switchToLogin={() => setPage('login')} />}
       {page === 'reset'      && <ResetPassword  token={resetToken} switchToLogin={goToLogin} />}
       {page === 'mock-oauth' && <MockOAuthAuthorize

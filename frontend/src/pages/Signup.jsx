@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { api } from '../api.js'
 
-export default function Signup({ onAuth, switchToLogin }) {
+export default function Signup({ onRegistered, switchToLogin }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -12,11 +12,13 @@ export default function Signup({ onAuth, switchToLogin }) {
     setError('')
     setBusy(true)
     try {
-      const user = await api.signup(email, password)
-      console.log('[Signup] success — got user:', user)
-      onAuth(user)
+      await api.signup(email, password)
+      // Registration should not drop the user straight into the app — clear the
+      // session the backend established and send them to the login page to sign
+      // in explicitly.
+      await api.logout().catch(() => {})
+      onRegistered(email)
     } catch (err) {
-      console.log('[Signup] caught error — status:', err.status, 'data:', err.data, 'message:', err.message)
       if (err.status === 400) {
         const issue = err.data?.issues?.[0]?.message
         setError(issue ? `Invalid input — ${issue}.` : 'Please check your email and password.')

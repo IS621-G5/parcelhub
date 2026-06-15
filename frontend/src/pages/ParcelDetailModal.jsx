@@ -54,7 +54,7 @@ function buildEvents(parcel) {
 
   // hours after `base` for each lifecycle step
   const steps = [
-    { key: 'received',   hrs: 0,  title: 'Order received',            loc: 'ParcelHub',                     done: true },
+    { key: 'received',   hrs: 0,  title: 'Tracking started',          loc: 'ParcelHub',                     done: true },
     { key: 'transit',    hrs: 8,  title: 'In transit',                loc: pickLocation(seed, 1),           done: stage >= 2 },
     { key: 'out',        hrs: 30, title: 'Out for delivery',          loc: pickLocation(seed, 2),           done: stage >= 3 },
     { key: 'delivered',  hrs: 36, title: 'Delivered',                 loc: pickLocation(seed, 3),           done: stage >= 4 },
