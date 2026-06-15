@@ -4,6 +4,7 @@ import cors from 'cors'
 import helmet from 'helmet'
 import { config } from './config/index.js'
 import { getDb } from './db/index.js'
+import { seedDemoUser } from './db/seed.js'
 import userRoutes from './modules/users/routes.js'
 import parcelRoutes from './modules/parcels/routes.js'
 import notificationRoutes from './modules/notifications/routes.js'
@@ -89,6 +90,7 @@ export function buildApp() {
 // hold open a real port. NODE_ENV=test is set by the test runner.
 if (process.env.NODE_ENV !== 'test') {
   getDb()
+  seedDemoUser()
   const app = buildApp()
   app.listen(config.port, () => {
     console.log(`[server] listening on http://localhost:${config.port}`)
