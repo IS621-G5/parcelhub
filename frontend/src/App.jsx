@@ -120,7 +120,7 @@ export default function App() {
         const successMsg = `${provName} connected — ${parts.join(' · ')}.`
         if (imported > 0) {
           // Stash the message so it survives the reload that refreshes the list
-          sessionStorage.setItem('oauth_flash', successMsg)
+          window.history.replaceState({}, '', window.location.pathname)
           window.location.reload()
         } else {
           setOauthFeedback({ type: 'success', message: successMsg })
