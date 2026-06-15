@@ -12,6 +12,11 @@ services:
         value: 3001
       - key: BCRYPT_COST
         value: 10
+      # Seed the fixed demo account (demo@parcelhub.com / Demo1234) on boot.
+      # Needed in production because the free-tier disk is ephemeral and resets
+      # on each deploy, otherwise the account vanishes and you'd re-register.
+      - key: SEED_DEMO
+        value: "true"
       - key: DB_PATH
         value: /data/parcelhub.db
       - key: SESSION_SECRET
