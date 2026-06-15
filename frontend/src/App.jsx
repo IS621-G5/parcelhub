@@ -42,7 +42,14 @@ export default function App() {
   const [oauthFeedback, setOauthFeedback] = useState(null)  // surfaces back to Dashboard
 
   useEffect(() => {
-    const params = readParams()
+    // Show any OAuth success message stashed before a post-import reload
+    const flash = sessionStorage.getItem('oauth_flash')
+    if (flash) {
+      sessionStorage.removeItem('oauth_flash')
+      setOauthFeedback({ type: 'success', message: flash })
+    }
+
+    const params = readParams() 
 
     // ── 1. Forgot-password reset link
     if (params.resetToken && /^[0-9a-f]{64}$/.test(params.resetToken)) {
@@ -110,14 +117,14 @@ export default function App() {
       if (noTrack) parts.push(`${noTrack} not shipped yet`)
       if (dup) parts.push(`${dup} already in your list`)
 
-      setOauthFeedback({
-        type: 'success',
-        message: `${provName} connected — ${parts.join(' · ')}.`,
-      })
-
-      if (imported > 0) {
-        setTimeout(() => window.location.reload(), 1200)
-      }
+        const successMsg = `${provName} connected — ${parts.join(' · ')}.`
+        if (imported > 0) {
+          // Stash the message so it survives the reload that refreshes the list
+          sessionStorage.setItem('oauth_flash', successMsg)
+          window.location.reload()
+        } else {
+          setOauthFeedback({ type: 'success', message: successMsg })
+        }
     } catch (err) {
       setOauthFeedback({
         type: 'error',
