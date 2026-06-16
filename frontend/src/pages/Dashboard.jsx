@@ -303,6 +303,11 @@ export default function Dashboard({ user, onLogout, oauthFeedback, onClearOAuthF
         <ParcelDetailModal
           parcel={detailParcel}
           onClose={() => setDetailParcel(null)}
+          onChanged={(updated) => {
+            setDetailParcel(updated)
+            reload()
+            setBellKey(k => k + 1)
+          }}
           onDeleted={(id) => {
             setParcels(prev => prev.filter(x => x.id !== id))
             setDetailParcel(null)

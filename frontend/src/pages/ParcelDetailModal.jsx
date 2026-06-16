@@ -103,7 +103,7 @@ function fmtDate(iso) {
   })
 }
 
-export default function ParcelDetailModal({ parcel, onClose, onDeleted }) {
+export default function ParcelDetailModal({ parcel, onClose, onDeleted, onChanged }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -123,6 +123,19 @@ export default function ParcelDetailModal({ parcel, onClose, onDeleted }) {
       onClose?.()
     } catch (err) {
       setError('Could not delete this parcel. Please try again.')
+      setBusy(false)
+    }
+  }
+
+  async function changeStatus(status) {
+    setError('')
+    setBusy(true)
+    try {
+      const updated = await api.parcels.simulateStatus(parcel.id, status)
+      onChanged?.(updated)
+    } catch (err) {
+      setError('Could not update status. Please try again.')
+    } finally {
       setBusy(false)
     }
   }
@@ -219,6 +232,44 @@ export default function ParcelDetailModal({ parcel, onClose, onDeleted }) {
           )}
           <DetailRow label="Added" value={fmtDate(parcel.created_at)} last />
         </div>
+
+        {/* Demo: simulate a provider status update so the anomaly-first states
+            (stuck / exception) are reachable without a live courier feed. */}
+        {onChanged && (
+          <div style={{
+            marginTop: 12, padding: '12px 14px',
+            background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 10,
+          }}>
+            <div style={{
+              fontSize: 11, fontWeight: 700, letterSpacing: '0.06em',
+              textTransform: 'uppercase', color: '#92651E', marginBottom: 8,
+            }}>
+              Simulate status · demo
+            </div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {[
+                { key: 'in_transit',       label: 'In transit' },
+                { key: 'out_for_delivery', label: 'Out for delivery' },
+                { key: 'stuck',            label: 'Stuck' },
+                { key: 'exception',        label: 'Exception' },
+              ].map(s => {
+                const active = parcel.status === s.key
+                return (
+                  <button
+                    key={s.key}
+                    type="button"
+                    className="row-btn"
+                    disabled={busy || active}
+                    onClick={() => changeStatus(s.key)}
+                    style={active ? { borderColor: 'var(--amber-500)', color: 'var(--amber-700)', background: '#FEF3C7' } : undefined}
+                  >
+                    {s.label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
 
         <div style={{ fontSize: 11, color: '#B0B8C4', marginTop: 10, lineHeight: 1.5 }}>
           Tracking events are simulated for the IS621 demo. ParcelHub's MVP

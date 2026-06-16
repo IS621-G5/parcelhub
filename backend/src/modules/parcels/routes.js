@@ -4,9 +4,12 @@ import rateLimit, { ipKeyGenerator } from 'express-rate-limit'
 import {
   listParcelsForUser, createParcel, findParcelForUser, existsForUser,
   updateParcel, archiveParcel, restoreParcel,
-  markParcelDelivered, upsertRating, getRatingForParcel,
+  markParcelDelivered, upsertRating, getRatingForParcel, setParcelStatus,
 } from './service.js'
-import { createDeliveryNotification, markDeliveryNotificationRead } from '../notifications/service.js'
+import {
+  createDeliveryNotification, markDeliveryNotificationRead,
+  createExceptionNotification, clearExceptionNotification,
+} from '../notifications/service.js'
 import { requireAuth } from '../../middleware/auth.js'
 
 const router = Router()
@@ -147,6 +150,38 @@ router.post('/:id/mock-deliver', requireAuth, (req, res, next) => {
       parcelLabel: result.parcel.label,
       provider: result.parcel.provider,
     })
+    res.json(result.parcel)
+  } catch (err) { next(err) }
+})
+
+// Demo helper: simulate a provider/courier status update. Lets the demo reach
+// the anomaly-first states (stuck / exception) and resolve them again. In
+// production these transitions come from courier webhooks / provider polling.
+// 'delivered' is intentionally excluded — use /mock-deliver (it also fires the
+// delivery-confirmation notification).
+const statusSchema = z.object({
+  status: z.enum(['in_transit', 'out_for_delivery', 'stuck', 'exception']),
+}).strict()
+
+router.post('/:id/mock-status', requireAuth, (req, res, next) => {
+  try {
+    const id = Number(req.params.id)
+    if (!Number.isFinite(id)) return res.status(400).json({ error: 'invalid_id' })
+    const parsed = statusSchema.safeParse(req.body)
+    if (!parsed.success) return res.status(400).json({ error: 'invalid_input' })
+
+    const result = setParcelStatus({ parcelId: id, userId: req.userId, status: parsed.data.status })
+    if (!result.ok) return res.status(404).json({ error: 'not_found' })
+
+    // Entering a problem state raises an in-app alert; leaving it clears the alert.
+    if (parsed.data.status === 'stuck' || parsed.data.status === 'exception') {
+      createExceptionNotification({
+        userId: req.userId, parcelId: id, status: parsed.data.status,
+        parcelLabel: result.parcel.label, provider: result.parcel.provider,
+      })
+    } else {
+      clearExceptionNotification({ userId: req.userId, parcelId: id })
+    }
     res.json(result.parcel)
   } catch (err) { next(err) }
 })

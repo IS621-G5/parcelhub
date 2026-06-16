@@ -107,6 +107,19 @@ export function markParcelDelivered({ parcelId, userId }) {
   return { ok: true, parcel: findParcelForUser(parcelId, userId), alreadyDelivered: false }
 }
 
+// Demo helper: simulate a provider/courier status update so the anomaly-first
+// dashboard (stuck / exception → "Needs attention") is reachable in the MVP.
+// Owner-scoped (IDOR-safe). Caller validates `status` against an allowlist.
+export function setParcelStatus({ parcelId, userId, status }) {
+  const result = getDb().prepare(`
+    UPDATE parcels
+    SET status = ?, updated_at = datetime('now')
+    WHERE id = ? AND user_id = ?
+  `).run(status, parcelId, userId)
+  if (result.changes === 0) return { ok: false, reason: 'not_found' }
+  return { ok: true, parcel: findParcelForUser(parcelId, userId) }
+}
+
 // Upsert a rating. Caller must verify the parcel is owned + delivered.
 // SQLite UPSERT keyed on parcel_id's UNIQUE constraint.
 export function upsertRating({ userId, parcelId, stars, comment }) {

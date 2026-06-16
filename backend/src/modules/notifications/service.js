@@ -111,3 +111,41 @@ export function markDeliveryNotificationRead({ userId, parcelId }) {
     WHERE user_id = ? AND parcel_id = ? AND type = 'delivery_confirmation' AND read_at IS NULL
   `).run(userId, parcelId)
 }
+
+// Fire an in-app alert when a parcel enters a problem state (stuck/exception) —
+// this is what makes the "anomaly-first" story show up in the bell + badge.
+// One alert per parcel (dedup index); re-entering a problem state refreshes the
+// message and re-opens it so the bell re-surfaces the latest issue.
+export function createExceptionNotification({ userId, parcelId, status, parcelLabel, provider }) {
+  const labelText = parcelLabel || provider || 'Your parcel'
+  const message = status === 'stuck'
+    ? `${labelText} looks stuck — no tracking movement for a while. Tap to review.`
+    : `${labelText} hit a delivery exception — it needs your attention.`
+  try {
+    const result = getDb().prepare(`
+      INSERT INTO notification_events (user_id, parcel_id, type, message)
+      VALUES (?, ?, 'exception_alert', ?)
+    `).run(userId, parcelId, message)
+    return { id: result.lastInsertRowid, created: true }
+  } catch (err) {
+    if (String(err.message).includes('UNIQUE')) {
+      getDb().prepare(`
+        UPDATE notification_events
+        SET message = ?, read_at = NULL, created_at = datetime('now')
+        WHERE user_id = ? AND parcel_id = ? AND type = 'exception_alert'
+      `).run(message, userId, parcelId)
+      return { created: false, updated: true }
+    }
+    throw err
+  }
+}
+
+// Resolve: when a parcel leaves the problem state, mark its exception alert read
+// so the unread badge clears.
+export function clearExceptionNotification({ userId, parcelId }) {
+  getDb().prepare(`
+    UPDATE notification_events
+    SET read_at = datetime('now')
+    WHERE user_id = ? AND parcel_id = ? AND type = 'exception_alert' AND read_at IS NULL
+  `).run(userId, parcelId)
+}

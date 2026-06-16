@@ -36,6 +36,8 @@ export const api = {
               request('POST', '/parcels', { tracking_number, provider, label }),
     // Sprint 2 — US2.8: simulate courier delivery webhook for demo
     mockDeliver: (id)                   => request('POST', `/parcels/${id}/mock-deliver`),
+    // Demo: simulate a provider status update (in_transit / out_for_delivery / stuck / exception)
+    simulateStatus: (id, status)        => request('POST', `/parcels/${id}/mock-status`, { status }),
     // Sprint 2 — US2.8 + US4.2: one endpoint, two flows
     rate:        (id, stars, comment)   => request('PUT',  `/parcels/${id}/rating`, { stars, comment }),
     getRating:   (id)                   => request('GET',  `/parcels/${id}/rating`),
