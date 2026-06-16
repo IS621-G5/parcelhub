@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api } from '../api.js'
+import { useModalA11y } from '../useModalA11y.js'
 
 // US2.9.1 / US2.9.2 — Connect Shopee + Lazada via real OAuth 2.0 redirect.
 //
@@ -25,6 +26,8 @@ export default function LinkedAccountsModal({ onClose, onChanged }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [info, setInfo] = useState('')
+  const modalRef = useRef(null)
+  useModalA11y(modalRef, onClose)
 
   async function reload() {
     try {
@@ -91,7 +94,8 @@ export default function LinkedAccountsModal({ onClose, onChanged }) {
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal modal-wide" onClick={e => e.stopPropagation()}>
+      <div className="modal modal-wide" ref={modalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Linked accounts"
+           onClick={e => e.stopPropagation()}>
         <h2>Linked accounts</h2>
         <p className="subtitle">Connect your e-commerce accounts to auto-import parcels.</p>
 

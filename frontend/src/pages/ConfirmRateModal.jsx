@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api } from '../api.js'
+import { useModalA11y } from '../useModalA11y.js'
 
 // Reusable modal: collects 1-5 star rating + optional comment, submits via
 // PUT /parcels/:id/rating. Same endpoint serves both US2.8 (from bell) and
@@ -12,6 +13,8 @@ export default function ConfirmRateModal({ parcelId, parcel, onClose, onSubmitte
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [loaded, setLoaded] = useState(false)
+  const modalRef = useRef(null)
+  useModalA11y(modalRef, onClose)
 
   // Pre-fill existing rating if any (edit flow). Silent if none.
   useEffect(() => {
@@ -48,7 +51,8 @@ export default function ConfirmRateModal({ parcelId, parcel, onClose, onSubmitte
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <form className="modal" onClick={e => e.stopPropagation()} onSubmit={submit}>
+      <form className="modal" ref={modalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Confirm delivery and rate"
+            onClick={e => e.stopPropagation()} onSubmit={submit}>
         <h2>Confirm delivery &amp; rate</h2>
         <p className="subtitle">
           {parcel?.label || parcel?.tracking_number || 'Your parcel'} — how was the experience?
@@ -91,7 +95,7 @@ export default function ConfirmRateModal({ parcelId, parcel, onClose, onSubmitte
             Cancel
           </button>
           <button type="submit" className="btn-primary" disabled={busy || !loaded}>
-            {busy ? 'Saving…' : 'Confirm &amp; submit'}
+            {busy ? 'Saving…' : 'Confirm & submit'}
           </button>
         </div>
       </form>

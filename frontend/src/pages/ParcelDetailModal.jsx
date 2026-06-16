@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { api } from '../api.js'
+import { useModalA11y } from '../useModalA11y.js'
 
 // US2.4 — View parcel details + simulated shipment tracking events.
 // US2.6 — Soft-delete a parcel from the detail view.
@@ -106,6 +107,8 @@ export default function ParcelDetailModal({ parcel, onClose, onDeleted }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const modalRef = useRef(null)
+  useModalA11y(modalRef, onClose)
 
   if (!parcel) return null
 
@@ -126,7 +129,8 @@ export default function ParcelDetailModal({ parcel, onClose, onDeleted }) {
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal modal-wide" onClick={e => e.stopPropagation()}>
+      <div className="modal modal-wide" ref={modalRef} tabIndex={-1} role="dialog" aria-modal="true"
+           aria-label={`Parcel details: ${parcel.label || parcel.tracking_number}`} onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div>
           <h2 style={{ margin: 0 }}>{parcel.label || parcel.tracking_number}</h2>
