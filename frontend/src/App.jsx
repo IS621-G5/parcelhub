@@ -159,7 +159,15 @@ export default function App() {
   }
 
   if (loading) {
-    return <div className="loading">Loading…</div>
+    return (
+      <div className="loading">
+        <div className="loading-inner">
+          <div className="loading-spinner" />
+          <div className="loading-title">Starting ParcelHub…</div>
+          <div className="loading-sub">First load can take up to ~30s while the free-tier server wakes up.</div>
+        </div>
+      </div>
+    )
   }
 
   return (

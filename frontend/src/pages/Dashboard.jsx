@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../api.js'
+import { useModalA11y } from '../useModalA11y.js'
 import NotificationBell from './NotificationBell.jsx'
 import ConfirmRateModal from './ConfirmRateModal.jsx'
 import LinkedAccountsModal from './LinkedAccountsModal.jsx'
@@ -16,6 +17,18 @@ const STATUS_CONFIG = {
 }
 function configFor(status) {
   return STATUS_CONFIG[status] || STATUS_CONFIG.pending
+}
+
+// Make a non-button element behave like a button for keyboard users.
+function clickable(handler) {
+  return {
+    role: 'button',
+    tabIndex: 0,
+    onClick: handler,
+    onKeyDown: e => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handler() }
+    },
+  }
 }
 
 const FILTERS = [
@@ -163,17 +176,19 @@ export default function Dashboard({ user, onLogout, oauthFeedback, onClearOAuthF
 
         {/* Quick action cards */}
         <div className="quick-cards">
-          <div className="quick-card dark" onClick={() => setShowAdd(true)}>
+          <div className="quick-card dark" aria-label="Add a parcel" {...clickable(() => setShowAdd(true))}>
             <div className="qc-icon">📦</div>
             <div className="qc-title">Add a parcel</div>
             <div className="qc-sub">Track a new shipment by tracking number</div>
             <div className="qc-cta">+ Add now</div>
           </div>
-          <div className="quick-card light" onClick={() => setShowLinked(true)}>
+          <div className="quick-card light" aria-label="Linked accounts" {...clickable(() => setShowLinked(true))}>
             <div className="qc-icon">🔗</div>
             <div className="qc-title">Linked accounts</div>
             <div className="qc-sub">
-              <strong>{linkedCount} of 2</strong> connected · Shopee &amp; Lazada auto-import
+              {linkedCount === 0
+                ? <><strong>0 of 2</strong> connected · connect Shopee or Lazada to import orders</>
+                : <><strong>{linkedCount} of 2</strong> connected · Shopee &amp; Lazada auto-import</>}
             </div>
             <div className="linked-card-logos">
               <div className={'mini ' + (linkedProviders.includes('shopee') ? 'shopee' : 'placeholder')}>
@@ -245,7 +260,7 @@ export default function Dashboard({ user, onLogout, oauthFeedback, onClearOAuthF
         {loading ? (
           <SkeletonList />
         ) : filtered.length === 0 ? (
-          <EmptyState filter={filter} onAdd={() => setShowAdd(true)} />
+          <EmptyState filter={filter} onAdd={() => setShowAdd(true)} onConnect={() => setShowLinked(true)} />
         ) : (
           <div>
             {groups.map(g => (
@@ -310,7 +325,8 @@ function ParcelRow({ p, onMockDeliver, onRate, onOpen }) {
   const when = relativeTime(p.created_at)
   const isDelivered = p.status === 'delivered'
   return (
-    <div className={'parcel ' + cfg.rowMod} onClick={onOpen} style={{ cursor: 'pointer' }}>
+    <div className={'parcel ' + cfg.rowMod} style={{ cursor: 'pointer' }}
+         aria-label={`Open ${p.label || p.tracking_number}`} {...clickable(onOpen)}>
       <div className={'parcel-avatar ' + providerKey(p.provider)} title={p.provider}>
         {providerInitial(p.provider)}
       </div>
@@ -336,8 +352,8 @@ function ParcelRow({ p, onMockDeliver, onRate, onOpen }) {
             ★ {p.rating_stars ? 'Edit rating' : 'Rate'}
           </button>
         ) : (
-          <button className="row-btn" onClick={onMockDeliver} title="Demo: simulate courier delivery webhook">
-            Mark delivered
+          <button className="row-btn" onClick={onMockDeliver} title="Demo helper — simulates a courier delivery webhook (normally fired by the provider)">
+            Simulate delivery
           </button>
         )}
         <span className="parcel-time">{when}</span>
@@ -380,14 +396,14 @@ function SkeletonList() {
 }
 
 // Empty state — different messaging per filter, with a subtle SVG illustration.
-function EmptyState({ filter, onAdd }) {
+function EmptyState({ filter, onAdd, onConnect }) {
   const copy = filter === 'attention'
     ? { title: 'Nothing needs attention', body: 'All your parcels are either in transit or delivered. Nice.', cta: null }
     : filter === 'delivered'
     ? { title: 'No deliveries yet', body: 'Once parcels are delivered they\'ll show up here.', cta: null }
     : filter === 'in_transit'
-    ? { title: 'No parcels in transit', body: 'Add a tracking number or connect a Shopee / Lazada account to start.', cta: 'Add a parcel' }
-    : { title: 'No parcels yet', body: 'Track a parcel manually, or connect a shop to auto-import your orders.', cta: 'Add your first parcel' }
+    ? { title: 'No parcels in transit', body: 'Add a tracking number or connect a Shopee / Lazada account to start.', cta: 'Add a parcel', connect: true }
+    : { title: 'No parcels yet', body: 'Track a parcel manually, or connect a shop to auto-import your orders.', cta: 'Add your first parcel', connect: true }
 
   return (
     <div className="empty">
@@ -414,8 +430,11 @@ function EmptyState({ filter, onAdd }) {
       </div>
       <h3>{copy.title}</h3>
       <p>{copy.body}</p>
-      {copy.cta && (
-        <button className="btn-primary" onClick={onAdd}>{copy.cta}</button>
+      {(copy.cta || copy.connect) && (
+        <div className="empty-actions">
+          {copy.cta && <button className="btn-primary" onClick={onAdd}>{copy.cta}</button>}
+          {copy.connect && <button className="btn-secondary" onClick={onConnect}>Connect account</button>}
+        </div>
       )}
     </div>
   )
@@ -441,6 +460,8 @@ function AddParcelModal({ onClose, onCreated }) {
   const [label, setLabel] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const modalRef = useRef(null)
+  useModalA11y(modalRef, onClose)
 
   async function submit(e) {
     e.preventDefault()
@@ -460,7 +481,8 @@ function AddParcelModal({ onClose, onCreated }) {
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <form className="modal" onClick={e => e.stopPropagation()} onSubmit={submit}>
+      <form className="modal" ref={modalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Add a parcel"
+            onClick={e => e.stopPropagation()} onSubmit={submit}>
         <h2>Add a parcel</h2>
         <p className="subtitle">Track a new shipment by tracking number.</p>
 
