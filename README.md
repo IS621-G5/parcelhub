@@ -39,14 +39,9 @@ cd backend
 npm test
 ```
 
-Expected output:
-
-```
-PASS  tests/auth.register.test.js
-PASS  tests/auth.login.test.js
-
-Tests:       8 passed, 8 total
-```
+The exact automated test count changes as the backlog grows. Use the latest
+GitHub Actions CI run and the final testing evidence package for the current
+Jest test count and coverage summary.
 
 ## Sprint 1 Negative-Path Test Coverage
 
