@@ -15,7 +15,7 @@ import { requireAuth } from '../../middleware/auth.js'
 const router = Router()
 
 const createSchema = z.object({
-  tracking_number: z.string().min(6).max(30),
+  tracking_number: z.string().min(6).max(30).regex(/^[A-Za-z0-9]+$/),
   provider: z.enum(['DHL', 'Ninja Van', 'SingPost']),
   label: z.string().max(120).optional(),
   notes: z.string().max(500).optional(),
