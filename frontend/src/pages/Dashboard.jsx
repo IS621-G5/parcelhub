@@ -476,7 +476,7 @@ function AddParcelModal({ onClose, onCreated }) {
       await api.parcels.create(tracking, provider, label)
       onCreated()
     } catch (err) {
-      if (err.status === 400)      setError('Invalid input. Tracking number must be 6–30 characters.')
+      if (err.status === 400)      setError('Invalid input. Tracking number must be 6–30 letters or numbers, with no special characters.')
       else if (err.status === 409) setError('You already have a parcel with that tracking number.')
       else                         setError('Something went wrong.')
     } finally {
@@ -496,10 +496,12 @@ function AddParcelModal({ onClose, onCreated }) {
           <input
             id="tracking"
             value={tracking}
-            onChange={e => setTracking(e.target.value)}
+            onChange={e => setTracking(e.target.value.replace(/[^A-Za-z0-9]/g, ''))}
             required
             minLength={6}
             maxLength={30}
+            inputMode="text"
+            pattern="[A-Za-z0-9]+"
             placeholder="e.g. DHL123456"
           />
         </div>
