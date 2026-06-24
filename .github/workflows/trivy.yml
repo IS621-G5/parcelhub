@@ -18,7 +18,7 @@ jobs:
     name: Trivy — npm filesystem scan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Scan backend dependencies
         uses: aquasecurity/trivy-action@master
@@ -61,7 +61,7 @@ jobs:
     name: Trivy — backend Docker image
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Check if backend/Dockerfile exists yet
         id: check
